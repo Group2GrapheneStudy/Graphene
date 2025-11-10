@@ -1,8 +1,8 @@
 using System.Diagnostics;
-using Graphene.Models;
+using Graphene_Group_Project.Models;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Graphene.Controllers
+namespace Graphene_Group_Project.Controllers
 {
     public class HomeController : Controller
     {

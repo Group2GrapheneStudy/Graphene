@@ -1,0 +1,51 @@
+﻿@{
+    ViewData["Title"] = "Clinician Dashboard";
+}
+<div class="row g-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h3 class="card-title mb-3">Clinician Dashboard</h3>
+                <p class="text-muted">Placeholder for patient list, alerts, comparisons.</p>
+
+                <div class="row g-3">
+                    <div class="col-lg-4">
+                        <div class="card border-0 shadow-sm h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">Assigned Patients</h5>
+                                <ul class="mb-0">
+                                    <li>Patient A — <span class="text-danger">Flagged</span></li>
+                                    <li>Patient B — Stable</li>
+                                    <li>Patient C — Review</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-4">
+                        <div class="card border-0 shadow-sm h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">Recent Alerts</h5>
+                                <ul class="mb-0">
+                                    <li>High pressure event (A) — 10:42</li>
+                                    <li>Sensor dropout (C) — 09:15</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-4">
+                        <div class="card border-0 shadow-sm h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">Quick Actions</h5>
+                                <a class="btn btn-primary btn-sm mb-2" href="#">Compare Patients</a><br />
+                                <a class="btn btn-outline-secondary btn-sm" href="#">Generate Report</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-4" />
+                <a class="btn btn-outline-primary" href="#">Open Comments</a>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,4 +1,4 @@
-namespace Graphene.Models
+namespace Graphene_Group_Project.Models
 {
     public class ErrorViewModel
     {

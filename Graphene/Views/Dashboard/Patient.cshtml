@@ -1,0 +1,44 @@
+﻿@{
+    ViewData["Title"] = "Patient Dashboard";
+}
+<div class="row g-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h3 class="card-title mb-3">Patient Dashboard</h3>
+                <p class="text-muted">Hook up patient metrics here.</p>
+
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title">Peak Pressure Index</h5>
+                                <p class="display-6 mb-0">—</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title">Contact Area %</h5>
+                                <p class="display-6 mb-0">—</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title">Last Updated</h5>
+                                <p class="display-6 mb-0">@DateTime.UtcNow.ToString("u")</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-4" />
+                <a class="btn btn-primary" href="#">View Heat Map</a>
+                <a class="btn btn-outline-secondary" href="#">Download Report</a>
+            </div>
+        </div>
+    </div>
+</div>
