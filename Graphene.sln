@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36518.9 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Graphene", "Graphene\Graphene.csproj", "{9CF9D11D-4FD0-4502-8A14-3C766E15FD56}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9CF9D11D-4FD0-4502-8A14-3C766E15FD56}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9CF9D11D-4FD0-4502-8A14-3C766E15FD56}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9CF9D11D-4FD0-4502-8A14-3C766E15FD56}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9CF9D11D-4FD0-4502-8A14-3C766E15FD56}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {9A9BBDAC-A221-4C91-9464-8073560572CA}
+	EndGlobalSection
+EndGlobal
