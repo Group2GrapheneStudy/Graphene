@@ -12,7 +12,7 @@
         public byte Width { get; set; } = 32;
         public byte Height { get; set; } = 32;
 
-        // Stored metrics (fast dashboards, no file I/O required)
+        // Stored metrics
         public int? PeakPressure { get; set; }
         public int? PixelsAboveThr { get; set; }
         public decimal? ContactAreaPct { get; set; }

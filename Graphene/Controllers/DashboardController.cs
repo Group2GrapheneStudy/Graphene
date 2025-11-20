@@ -1,6 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 
-namespace GrapheneTrace.Web.Controllers  // <- change to your namespace if needed
+namespace GrapheneTrace.Web.Controllers 
 {
     public class DashboardController : Controller
     {

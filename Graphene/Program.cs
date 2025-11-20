@@ -3,10 +3,8 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Get connection string from appsettings.json
 var cs = builder.Configuration.GetConnectionString("DefaultConnection");
 
-// Use SQL Server LocalDB instead of MySQL
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(cs));
 

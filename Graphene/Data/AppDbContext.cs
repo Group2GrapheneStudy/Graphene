@@ -16,59 +16,59 @@ namespace Graphene_Group_Project.Data
         {
             base.OnModelCreating(b);
 
-            // -------- PRIMARY KEYS --------
+            // Primary Keys
             b.Entity<Patient>().HasKey(p => p.PatientId);
             b.Entity<DataFile>().HasKey(f => f.FileId);
             b.Entity<PressureFrame>().HasKey(f => f.FrameId);
             b.Entity<Alert>().HasKey(a => a.AlertId);
 
-            // -------- RELATIONSHIPS & DELETE BEHAVIOUR --------
+            // Relations
 
-            // Patient 1..* DataFiles  (cascade OK)
+            // Patient 1..* DataFiles
             b.Entity<DataFile>()
                 .HasOne(f => f.Patient)
                 .WithMany(p => p.Files)
                 .HasForeignKey(f => f.PatientId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Patient 1..* PressureFrames  (NO CASCADE to avoid multiple paths)
+            // Patient 1..* PressureFrames
             b.Entity<PressureFrame>()
                 .HasOne(f => f.Patient)
                 .WithMany(p => p.Frames)
                 .HasForeignKey(f => f.PatientId)
                 .OnDelete(DeleteBehavior.NoAction);
 
-            // DataFile 1..* PressureFrames  (cascade OK)
+            // DataFile 1..* PressureFrames
             b.Entity<PressureFrame>()
                 .HasOne(f => f.File)
                 .WithMany(df => df.Frames)
                 .HasForeignKey(f => f.FileId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Patient 1..* Alerts  (cascade OK)
+            // Patient 1..* Alerts
             b.Entity<Alert>()
                 .HasOne(a => a.Patient)
                 .WithMany(p => p.Alerts)
                 .HasForeignKey(a => a.PatientId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Optional link: Alert -> PressureFrame (NO CASCADE)
+            // Alert -> PressureFrame
             b.Entity<Alert>()
                 .HasOne(a => a.Frame)
                 .WithMany()
                 .HasForeignKey(a => a.FrameId)
                 .OnDelete(DeleteBehavior.NoAction);
 
-            // -------- DECIMAL PRECISION FIX --------
+            // Decimal for PressureFrame
             b.Entity<PressureFrame>()
                 .Property(f => f.ContactAreaPct)
                 .HasColumnType("decimal(18,2)");
 
-            // -------- INDEXES --------
+            // Indexes
             b.Entity<Patient>()
                 .HasIndex(p => p.ExternalUserId)
                 .IsUnique()
-#if !SQLITE
+#if !SQLITEx
                 .HasFilter("[ExternalUserId] IS NOT NULL");
 #endif
 
