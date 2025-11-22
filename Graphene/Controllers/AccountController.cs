@@ -1,24 +1,24 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
+using Graphene_Group_Project.Data;
+using Graphene_Group_Project.Models;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Graphene_Group_Project.Controllers
 {
     public class AccountController : Controller
     {
-        // Simple in-memory account model just for this demo
-        public class UserAccount
+        private readonly AppDbContext _context;
+
+        public AccountController(AppDbContext context)
         {
-            public int Id { get; set; }
-            public string FullName { get; set; } = string.Empty;
-            public string Email { get; set; } = string.Empty;
-            public string Password { get; set; } = string.Empty; // plain text for coursework demo
-            public string Role { get; set; } = string.Empty;      // "Patient", "Clinician", "Admin"
+            _context = context;
         }
 
-        // ViewModels for the Login / Register forms
+        // -------------------- VIEW MODELS --------------------
+
         public class LoginViewModel
         {
             [Required, EmailAddress]
@@ -50,66 +50,30 @@ namespace Graphene_Group_Project.Controllers
             public string Role { get; set; } = string.Empty;
         }
 
-        // --------------------------------------------------------------------
-        //  In-memory user store
-        // --------------------------------------------------------------------
-
-        private static readonly List<UserAccount> _accounts = new List<UserAccount>();
-        private static int _nextId = 1;
-
-        static AccountController()
-        {
-            // Seed with 1 user per role
-            _accounts.Add(new UserAccount
-            {
-                Id = _nextId++,
-                FullName = "Admin User",
-                Email = "admin@example.com",
-                Password = "Admin123!",   // demo password
-                Role = "Admin"
-            });
-
-            _accounts.Add(new UserAccount
-            {
-                Id = _nextId++,
-                FullName = "Demo Clinician",
-                Email = "clinician@example.com",
-                Password = "Clinician123!",
-                Role = "Clinician"
-            });
-
-            _accounts.Add(new UserAccount
-            {
-                Id = _nextId++,
-                FullName = "Demo Patient",
-                Email = "patient@example.com",
-                Password = "Patient123!",
-                Role = "Patient"
-            });
-        }
-
-        // --------------------------------------------------------------------
-        //  LOGIN
-        // --------------------------------------------------------------------
+        // -------------------- LOGIN --------------------
 
         [HttpGet]
-        public IActionResult Login()
+        public IActionResult Login(string? role)
         {
-            return View(new LoginViewModel());
+            // pre-select role if user clicked from a portal tile
+            var model = new LoginViewModel
+            {
+                Role = string.IsNullOrEmpty(role) ? "" : role
+            };
+
+            return View(model);
         }
 
         [HttpPost]
         public IActionResult Login(LoginViewModel model)
         {
             if (!ModelState.IsValid)
-            {
                 return View(model);
-            }
 
-            var user = _accounts.FirstOrDefault(u =>
-                u.Email.Equals(model.Email, StringComparison.OrdinalIgnoreCase) &&
-                u.Password == model.Password &&
-                u.Role.Equals(model.Role, StringComparison.OrdinalIgnoreCase));
+            var user = _context.UserAccounts.FirstOrDefault(u =>
+                u.Email == model.Email &&
+                u.Password == model.Password &&     // NOTE: for coursework only
+                u.Role == model.Role);
 
             if (user == null)
             {
@@ -117,27 +81,16 @@ namespace Graphene_Group_Project.Controllers
                 return View(model);
             }
 
-            // For coursework we simply redirect by role (no cookie/session needed)
-            if (user.Role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
-            {
-                return RedirectToAction("Dashboard", "Admin");
-            }
-            if (user.Role.Equals("Clinician", StringComparison.OrdinalIgnoreCase))
-            {
-                return RedirectToAction("Dashboard", "Clinician");
-            }
-            if (user.Role.Equals("Patient", StringComparison.OrdinalIgnoreCase))
-            {
-                return RedirectToAction("Dashboard", "Patient");
-            }
+            // ✅ save user info in session
+            HttpContext.Session.SetInt32("UserId", user.Id);
+            HttpContext.Session.SetString("UserRole", user.Role);
+            HttpContext.Session.SetString("UserName", user.FullName);
 
-            // Fallback – unknown role
-            return RedirectToAction("Index", "Home");
+            // ✅ redirect to appropriate dashboard
+            return RedirectToRoleDashboard(user.Role);
         }
 
-        // --------------------------------------------------------------------
-        //  REGISTER
-        // --------------------------------------------------------------------
+        // -------------------- REGISTER --------------------
 
         [HttpGet]
         public IActionResult Register()
@@ -149,44 +102,70 @@ namespace Graphene_Group_Project.Controllers
         public IActionResult Register(RegisterViewModel model)
         {
             if (!ModelState.IsValid)
+                return View(model);
+
+            if (_context.UserAccounts.Any(u => u.Email == model.Email))
             {
+                ModelState.AddModelError(nameof(model.Email),
+                    "An account with this email already exists.");
                 return View(model);
             }
 
-            // Check if email already exists
-            var existing = _accounts.FirstOrDefault(u =>
-                u.Email.Equals(model.Email, StringComparison.OrdinalIgnoreCase));
-
-            if (existing != null)
+            var user = new UserAccount
             {
-                ModelState.AddModelError(nameof(model.Email), "An account with this email already exists.");
-                return View(model);
-            }
-
-            var newAccount = new UserAccount
-            {
-                Id = _nextId++,
                 FullName = model.FullName,
                 Email = model.Email,
-                Password = model.Password,
+                Password = model.Password,  // coursework only
                 Role = model.Role
             };
 
-            _accounts.Add(newAccount);
+            _context.UserAccounts.Add(user);
+            _context.SaveChanges();
 
-            TempData["Message"] = "Registration successful! You can now log in.";
-            return RedirectToAction("Login");
+            // ✅ immediately log the user in & redirect to their dashboard
+            HttpContext.Session.SetInt32("UserId", user.Id);
+            HttpContext.Session.SetString("UserRole", user.Role);
+            HttpContext.Session.SetString("UserName", user.FullName);
+
+            return RedirectToRoleDashboard(user.Role);
         }
 
-        // --------------------------------------------------------------------
-        //  LOGOUT (dummy for now – no session/cookies used)
-        // --------------------------------------------------------------------
+        // -------------------- LOGOUT --------------------
 
         [HttpGet]
         public IActionResult Logout()
         {
+            HttpContext.Session.Clear();
             TempData["Message"] = "You have been logged out.";
             return RedirectToAction("Index", "Home");
+        }
+
+        // -------------------- ACCESS DENIED --------------------
+
+        [HttpGet]
+        public IActionResult AccessDenied()
+        {
+            return View();
+        }
+
+        // -------------------- HELPER --------------------
+
+        private IActionResult RedirectToRoleDashboard(string role)
+        {
+            switch (role)
+            {
+                case "Admin":
+                    return RedirectToAction("Admin", "Dashboard");      
+
+                case "Clinician":
+                    return RedirectToAction("Clinician", "Dashboard"); 
+
+                case "Patient":
+                    return RedirectToAction("Patient", "Dashboard");  
+
+                default:
+                    return RedirectToAction("Index", "Home");
+            }
         }
     }
 }

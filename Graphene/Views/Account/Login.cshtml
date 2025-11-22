@@ -42,10 +42,16 @@
                             <span asp-validation-for="Role" class="text-danger"></span>
                         </div>
 
-                        @if (!ViewData.ModelState.IsValid && ViewData.ModelState[string.Empty] != null)
+                        @{
+                            var hasGeneralErrors = !ViewData.ModelState.IsValid
+                            && ViewData.ModelState.ContainsKey(string.Empty)
+                            && ViewData.ModelState[string.Empty]!.Errors.Count > 0;
+                        }
+
+                        @if (hasGeneralErrors)
                         {
                             <div class="alert alert-danger">
-                                @foreach (var error in ViewData.ModelState[string.Empty].Errors)
+                                @foreach (var error in ViewData.ModelState[string.Empty]!.Errors)
                                 {
                                     <div>@error.ErrorMessage</div>
                                 }

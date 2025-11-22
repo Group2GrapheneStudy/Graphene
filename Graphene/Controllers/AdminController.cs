@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Graphene_Group_Project.Controllers
@@ -31,7 +32,7 @@ namespace Graphene_Group_Project.Controllers
         }
 
         // Demo in-memory data
-        private static readonly List<UserSummary> _users = new List<UserSummary>
+        private static readonly List<UserSummary> _users = new()
         {
             new UserSummary { UserId = 1, FullName = "Alice Patient",   Email = "alice@example.com",   Role = "Patient",   AccountStatus = "Active"   },
             new UserSummary { UserId = 2, FullName = "Bob Clinician",   Email = "bob@example.com",     Role = "Clinician", AccountStatus = "Active"   },
@@ -39,11 +40,38 @@ namespace Graphene_Group_Project.Controllers
             new UserSummary { UserId = 4, FullName = "Dana Patient",    Email = "dana@example.com",    Role = "Patient",   AccountStatus = "Disabled" }
         };
 
-        private static readonly List<AlertSummary> _alerts = new List<AlertSummary>
+        private static readonly List<AlertSummary> _alerts = new()
         {
             new AlertSummary { AlertId = 1, PatientName = "Alice Patient", Severity = "High",   IsReviewed = false, CreatedAt = DateTime.Now.AddMinutes(-30) },
             new AlertSummary { AlertId = 2, PatientName = "Dana Patient",  Severity = "Medium", IsReviewed = true,  CreatedAt = DateTime.Now.AddHours(-2)  }
         };
+
+        // --------------------------------------------------------------------
+        //  ACCESS CONTROL HELPERS
+        // --------------------------------------------------------------------
+
+        /// <summary>
+        /// Returns true if the current session user is an Admin.
+        /// </summary>
+        private bool UserIsAdmin()
+        {
+            var role = HttpContext.Session.GetString("UserRole");
+            return string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Call at the start of each action. If the user is not an Admin,
+        /// this returns a redirect to Account/AccessDenied; otherwise null.
+        /// </summary>
+        private IActionResult? CheckAdminAccess()
+        {
+            if (!UserIsAdmin())
+            {
+                return RedirectToAction("AccessDenied", "Account");
+            }
+
+            return null; // OK
+        }
 
         // --------------------------------------------------------------------
         //  DASHBOARD
@@ -52,6 +80,9 @@ namespace Graphene_Group_Project.Controllers
         // GET: /Admin or /Admin/Dashboard
         public IActionResult Dashboard()
         {
+            var access = CheckAdminAccess();
+            if (access != null) return access;
+
             // Always get a non-null list for the view
             var users = _users.OrderBy(u => u.FullName).ToList();
 
@@ -87,6 +118,9 @@ namespace Graphene_Group_Project.Controllers
         [HttpGet]
         public IActionResult CreateUser()
         {
+            var access = CheckAdminAccess();
+            if (access != null) return access;
+
             return Content("CreateUser placeholder – replace with a real create-user form later.");
         }
 
@@ -94,6 +128,9 @@ namespace Graphene_Group_Project.Controllers
         [HttpPost]
         public IActionResult CreateUser(string fullName, string email, string role)
         {
+            var access = CheckAdminAccess();
+            if (access != null) return access;
+
             var nextId = _users.Any() ? _users.Max(u => u.UserId) + 1 : 1;
 
             _users.Add(new UserSummary
@@ -113,6 +150,9 @@ namespace Graphene_Group_Project.Controllers
         [HttpGet]
         public IActionResult EditUser(int id)
         {
+            var access = CheckAdminAccess();
+            if (access != null) return access;
+
             var user = _users.FirstOrDefault(u => u.UserId == id);
             if (user == null)
             {
@@ -126,6 +166,9 @@ namespace Graphene_Group_Project.Controllers
         [HttpPost]
         public IActionResult EditUser(int id, string fullName, string email, string role, string status)
         {
+            var access = CheckAdminAccess();
+            if (access != null) return access;
+
             var user = _users.FirstOrDefault(u => u.UserId == id);
             if (user == null)
             {
@@ -144,6 +187,9 @@ namespace Graphene_Group_Project.Controllers
         // GET: /Admin/ToggleStatus/3
         public IActionResult ToggleStatus(int id)
         {
+            var access = CheckAdminAccess();
+            if (access != null) return access;
+
             var user = _users.FirstOrDefault(u => u.UserId == id);
             if (user == null)
             {
@@ -163,6 +209,9 @@ namespace Graphene_Group_Project.Controllers
         // GET: /Admin/HealthCheck
         public IActionResult HealthCheck()
         {
+            var access = CheckAdminAccess();
+            if (access != null) return access;
+
             var message =
                 "Health Check OK\n" +
                 "- Database: simulated\n" +
@@ -175,12 +224,18 @@ namespace Graphene_Group_Project.Controllers
         // GET: /Admin/ViewLogs
         public IActionResult ViewLogs()
         {
+            var access = CheckAdminAccess();
+            if (access != null) return access;
+
             return Content("Log viewer placeholder – no logs are being recorded in this demo.");
         }
 
         // GET: /Admin/AllAlerts
         public IActionResult AllAlerts()
         {
+            var access = CheckAdminAccess();
+            if (access != null) return access;
+
             var lines = _alerts
                 .OrderByDescending(a => a.CreatedAt)
                 .Select(a =>
@@ -193,6 +248,9 @@ namespace Graphene_Group_Project.Controllers
         // GET: /Admin/PurgeData
         public IActionResult PurgeData()
         {
+            var access = CheckAdminAccess();
+            if (access != null) return access;
+
             _alerts.Clear();
             TempData["Message"] = "Demo alerts cleared (in-memory only).";
             return RedirectToAction(nameof(Dashboard));

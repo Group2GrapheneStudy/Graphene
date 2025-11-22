@@ -1,28 +1,31 @@
 ﻿using Graphene_Group_Project.Data.Entities;
+using Graphene_Group_Project.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Graphene_Group_Project.Data
 {
     public class AppDbContext : DbContext
     {
-        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+        public AppDbContext(DbContextOptions<AppDbContext> options)
+            : base(options) { }
 
-        public DbSet<Patient> Patients => Set<Patient>();
-        public DbSet<DataFile> DataFiles => Set<DataFile>();
-        public DbSet<PressureFrame> PressureFrames => Set<PressureFrame>();
-        public DbSet<Alert> Alerts => Set<Alert>();
+        public DbSet<Patient> Patients { get; set; }
+        public DbSet<DataFile> DataFiles { get; set; }
+        public DbSet<PressureFrame> PressureFrames { get; set; }
+        public DbSet<Alert> Alerts { get; set; }
+        public DbSet<UserAccount> UserAccounts { get; set; }
 
         protected override void OnModelCreating(ModelBuilder b)
         {
             base.OnModelCreating(b);
 
-            // Primary Keys
+            // PRIMARY KEYS
             b.Entity<Patient>().HasKey(p => p.PatientId);
             b.Entity<DataFile>().HasKey(f => f.FileId);
             b.Entity<PressureFrame>().HasKey(f => f.FrameId);
             b.Entity<Alert>().HasKey(a => a.AlertId);
 
-            // Relations
+            // RELATIONSHIPS
 
             // Patient 1..* DataFiles
             b.Entity<DataFile>()
@@ -59,18 +62,16 @@ namespace Graphene_Group_Project.Data
                 .HasForeignKey(a => a.FrameId)
                 .OnDelete(DeleteBehavior.NoAction);
 
-            // Decimal for PressureFrame
+            // Decimal precision for ContactAreaPct
             b.Entity<PressureFrame>()
                 .Property(f => f.ContactAreaPct)
                 .HasColumnType("decimal(18,2)");
 
-            // Indexes
+            // INDEXES
+
             b.Entity<Patient>()
                 .HasIndex(p => p.ExternalUserId)
-                .IsUnique()
-#if !SQLITEx
-                .HasFilter("[ExternalUserId] IS NOT NULL");
-#endif
+                .IsUnique();
 
             b.Entity<DataFile>()
                 .HasIndex(f => new { f.PatientId, f.FilePath })
