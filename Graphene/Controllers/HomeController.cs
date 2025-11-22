@@ -1,32 +1,56 @@
-using System.Diagnostics;
-using Graphene_Group_Project.Models;
+using System;
+using System.Collections.Generic;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Graphene_Group_Project.Controllers
 {
     public class HomeController : Controller
     {
-        private readonly ILogger<HomeController> _logger;
-
-        public HomeController(ILogger<HomeController> logger)
-        {
-            _logger = logger;
-        }
-
+        // GET: / or /Home/Index
+        [HttpGet]
         public IActionResult Index()
         {
-            return View();
-        }
+            // High-level system summary (dummy values for now – replace with real stats later)
+            ViewBag.TotalPatients = 12;
+            ViewBag.TotalClinicians = 4;
+            ViewBag.TotalAdmins = 2;
+            ViewBag.TotalAlerts = 7;
 
-        public IActionResult Privacy()
-        {
-            return View();
-        }
+            // Quick navigation “tiles” for each role
+            ViewBag.RoleTiles = new[]
+            {
+                new {
+                    Title       = "Patient Portal",
+                    Description = "View your pressure heatmaps, alerts and comments.",
+                    ActionText  = "Go to Patient Dashboard",
+                    Url         = "/Patient/Dashboard",
+                    Badge       = "Patients"
+                },
+                new {
+                    Title       = "Clinician Portal",
+                    Description = "Review patient data, alerts and generate reports.",
+                    ActionText  = "Go to Clinician Dashboard",
+                    Url         = "/Clinician/Dashboard",
+                    Badge       = "Clinicians"
+                },
+                new {
+                    Title       = "Admin Portal",
+                    Description = "Manage user accounts, roles and system health.",
+                    ActionText  = "Go to Admin Dashboard",
+                    Url         = "/Admin/Dashboard",
+                    Badge       = "Admins"
+                }
+            };
 
-        [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
-        public IActionResult Error()
-        {
-            return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+            // Simple recent activity / notifications list
+            ViewBag.Notifications = new[]
+            {
+                new { Time = DateTime.Now.AddMinutes(-10).ToString("HH:mm"), Message = "High pressure alert triggered for Alice Patient." },
+                new { Time = DateTime.Now.AddHours(-1).ToString("HH:mm"),  Message = "Clinician Bob generated a daily report for Dana Patient." },
+                new { Time = DateTime.Now.AddHours(-3).ToString("HH:mm"),  Message = "New patient account created by Admin Charlie." }
+            };
+
+            return View();
         }
     }
 }

@@ -1,47 +1,192 @@
-﻿@{
+﻿@using System.Linq
+@{
     ViewData["Title"] = "Admin Dashboard";
+
+    // SAFE: if ViewBag.Users is null, use an empty list instead
+    var users = ViewBag.Users as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
 }
-<div class="row g-3">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-body">
-                <h3 class="card-title mb-3">Admin Dashboard</h3>
-                <p class="text-muted">Placeholder for user/role management.</p>
 
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <div class="card border-0 shadow-sm">
-                            <div class="card-body">
-                                <h5 class="card-title">Users</h5>
-                                <ul class="mb-3">
-                                    <li>alice@example.com — Patient</li>
-                                    <li>bob@example.com — Clinician</li>
-                                    <li>admin@example.com — Admin</li>
-                                </ul>
-                                <a class="btn btn-primary btn-sm" href="#">Create User</a>
-                                <a class="btn btn-outline-secondary btn-sm" href="#">Manage Roles</a>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="card border-0 shadow-sm">
-                            <div class="card-body">
-                                <h5 class="card-title">System</h5>
-                                <ul class="mb-3">
-                                    <li>Status: Operational</li>
-                                    <li>Last Migration: —</li>
-                                    <li>Storage: —</li>
-                                </ul>
-                                <a class="btn btn-outline-primary btn-sm" href="#">Run Health Check</a>
-                                <a class="btn btn-outline-secondary btn-sm" href="#">View Logs</a>
-                            </div>
-                        </div>
-                    </div>
+<div class="container mt-4">
+
+    <!-- PAGE HEADER -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold">Admin Dashboard</h2>
+        <span class="badge bg-success">System Operational</span>
+    </div>
+
+    <!-- SHOW ANY FLASH MESSAGE -->
+    @if (ViewBag.Message != null)
+    {
+        <div class="alert alert-info">@ViewBag.Message</div>
+    }
+
+    <!-- TOP STATS ROW -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <h6 class="text-muted">Total Users</h6>
+                    <h3 class="fw-bold text-primary">@ViewBag.TotalUsers</h3>
+                    <small class="text-muted">All Roles</small>
                 </div>
+            </div>
+        </div>
 
-                <hr class="my-4" />
-                <a class="btn btn-danger btn-sm" href="#">Purge Demo Data</a>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <h6 class="text-muted">Patients</h6>
+                    <h3 class="fw-bold text-success">@ViewBag.PatientCount</h3>
+                    <small class="text-muted">Registered Patients</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <h6 class="text-muted">Clinicians</h6>
+                    <h3 class="fw-bold text-info">@ViewBag.ClinicianCount</h3>
+                    <small class="text-muted">Active Clinicians</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <h6 class="text-muted">Admins</h6>
+                    <h3 class="fw-bold text-danger">@ViewBag.AdminCount</h3>
+                    <small class="text-muted">System Administrators</small>
+                </div>
             </div>
         </div>
     </div>
+
+    <!-- USER MANAGEMENT -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between mb-3">
+                <h5 class="fw-bold">User Management</h5>
+                <a class="btn btn-primary btn-sm" href="/Admin/CreateUser">+ Create New User</a>
+            </div>
+
+            <p class="text-muted">Overview of all users in the system.</p>
+
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th style="width: 160px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (users.Any())
+                    {
+                        foreach (var user in users)
+                        {
+                            <tr>
+                                <td>@user.FullName</td>
+                                <td>@user.Email</td>
+                                <td><span class="badge bg-secondary">@user.Role</span></td>
+                                <td>
+                                    @if (user.AccountStatus == "Active")
+                                    {
+                                        <span class="badge bg-success">Active</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger">Disabled</span>
+                                    }
+                                </td>
+                                <td>
+                                    <a class="btn btn-sm btn-outline-primary" href="/Admin/EditUser/@user.UserId">Edit</a>
+                                    <a class="btn btn-sm btn-outline-warning" href="/Admin/ToggleStatus/@user.UserId">Toggle</a>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="5" class="text-muted text-center">
+                                No users available.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+        </div>
+    </div>
+
+    <!-- SECONDARY TOOLS ROW -->
+    <div class="row g-4 mb-4">
+
+        <!-- SYSTEM HEALTH -->
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <h5 class="fw-bold">System Health</h5>
+                    <ul class="list-group mb-3">
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Database Status</span>
+                            <span class="text-success fw-bold">OK</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Last Migration</span>
+                            <span>@ViewBag.LastMigration</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Storage Usage</span>
+                            <span>@ViewBag.StorageUsage</span>
+                        </li>
+                    </ul>
+                    <a class="btn btn-outline-primary btn-sm" href="/Admin/HealthCheck">Run Health Check</a>
+                    <a class="btn btn-outline-secondary btn-sm" href="/Admin/ViewLogs">View Logs</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- ALERT SUMMARY -->
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <h5 class="fw-bold">Alert Summary</h5>
+                    <p class="text-muted mb-2">System-wide clinical alerts generated from patient datasets.</p>
+
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h3 class="fw-bold text-danger">@ViewBag.ActiveAlerts</h3>
+                            <small class="text-muted">Active Alerts</small>
+                        </div>
+                        <div>
+                            <h3 class="fw-bold text-success">@ViewBag.ReviewedAlerts</h3>
+                            <small class="text-muted">Reviewed Alerts</small>
+                        </div>
+                    </div>
+
+                    <a class="btn btn-outline-danger btn-sm mt-3" href="/Admin/AllAlerts">View All Alerts</a>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- DANGER ZONE -->
+    <div class="card shadow-sm border-0">
+        <div class="card-body">
+            <h5 class="fw-bold text-danger">Danger Zone</h5>
+            <p class="text-muted">Developer utilities for cleaning demo/test data.</p>
+
+            <a class="btn btn-danger btn-sm" href="/Admin/PurgeData"
+               onclick="return confirm('Are you sure you want to delete all demo data?');">
+                Purge Demo Data
+            </a>
+        </div>
+    </div>
+
 </div>
