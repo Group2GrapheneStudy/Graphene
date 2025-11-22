@@ -28,6 +28,8 @@ builder.Services.AddSession(options =>
 // BUILD APP
 // --------------------------------------------
 var app = builder.Build();
+builder.Services.AddSession();
+app.UseSession();
 
 // Auto-create database on first run
 using (var scope = app.Services.CreateScope())

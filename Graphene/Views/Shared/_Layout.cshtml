@@ -1,6 +1,14 @@
-﻿@{
+﻿@using Microsoft.AspNetCore.Http
+
+@{
     var title = ViewData["Title"] as string ?? "Graphene Trace";
+
+    // Safely read session values (null-safe)
+    var httpContext = Context;
+    var userName = httpContext?.Session?.GetString("UserName");
+    var userRole = httpContext?.Session?.GetString("UserRole");
 }
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -21,26 +29,72 @@
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
                     <span class="navbar-toggler-icon"></span>
                 </button>
+
                 <div id="mainNav" class="collapse navbar-collapse">
+                    <!-- LEFT SIDE LINKS -->
                     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                         <li class="nav-item">
                             <a class="nav-link" asp-controller="Home" asp-action="Index">Home</a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link" asp-controller="Dashboard" asp-action="Patient">Patient Dashboard</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" asp-controller="Dashboard" asp-action="Clinician">Clinician Dashboard</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" asp-controller="Dashboard" asp-action="Admin">Admin Dashboard</a>
-                        </li>
+
+                        @* Role-based dashboard links *@
+                        @if (!string.IsNullOrEmpty(userRole))
+                        {
+                            if (userRole == "Admin")
+                            {
+                                <li class="nav-item">
+                                    <a class="nav-link" asp-controller="Dashboard" asp-action="Admin">Admin Dashboard</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" asp-controller="Dashboard" asp-action="Clinician">Clinician Dashboard</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" asp-controller="Dashboard" asp-action="Patient">Patient Dashboard</a>
+                                </li>
+                            }
+                            else if (userRole == "Clinician")
+                            {
+                                <li class="nav-item">
+                                    <a class="nav-link" asp-controller="Dashboard" asp-action="Clinician">Clinician Dashboard</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" asp-controller="Dashboard" asp-action="Patient">Patient Dashboard</a>
+                                </li>
+                            }
+                            else if (userRole == "Patient")
+                            {
+                                <li class="nav-item">
+                                    <a class="nav-link" asp-controller="Dashboard" asp-action="Patient">My Dashboard</a>
+                                </li>
+                            }
+                        }
                     </ul>
-                    <!-- Placeholder auth buttons; replace when you wire Identity -->
-                    <div class="d-flex">
-                        <a class="btn btn-outline-light me-2" href="#">Login</a>
-                        <a class="btn btn-primary" href="#">Register</a>
-                    </div>
+
+                    <!-- RIGHT SIDE: LOGIN / REGISTER OR WELCOME / LOGOUT -->
+                    <ul class="navbar-nav ms-auto">
+                        @if (string.IsNullOrEmpty(userName))
+                        {
+                            <!-- Not logged in -->
+                            <li class="nav-item">
+                                <a class="btn btn-outline-light me-2" asp-controller="Account" asp-action="Login">Login</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="btn btn-primary" asp-controller="Account" asp-action="Register">Register</a>
+                            </li>
+                        }
+                        else
+                        {
+                            <!-- Logged in -->
+                            <li class="nav-item">
+                                <span class="navbar-text text-info me-3">
+                                    Welcome, @userName (@userRole)
+                                </span>
+                            </li>
+                            <li class="nav-item">
+                                <a class="btn btn-outline-danger" asp-controller="Account" asp-action="Logout">Logout</a>
+                            </li>
+                        }
+                    </ul>
                 </div>
             </div>
         </nav>
