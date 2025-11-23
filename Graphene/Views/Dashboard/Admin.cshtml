@@ -1,192 +1,424 @@
-﻿@using System.Linq
+﻿@model GrapheneTrace.Web.Controllers.DashboardController.AdminViewModel
 @{
     ViewData["Title"] = "Admin Dashboard";
-
-    // SAFE: if ViewBag.Users is null, use an empty list instead
-    var users = ViewBag.Users as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
 }
 
-<div class="container mt-4">
-
-    <!-- PAGE HEADER -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="fw-bold">Admin Dashboard</h2>
-        <span class="badge bg-success">System Operational</span>
-    </div>
-
-    <!-- SHOW ANY FLASH MESSAGE -->
-    @if (ViewBag.Message != null)
-    {
-        <div class="alert alert-info">@ViewBag.Message</div>
+<style>
+    .stat-card {
+        transition: transform .15s ease, box-shadow .15s ease;
     }
 
-    <!-- TOP STATS ROW -->
-    <div class="row g-4 mb-4">
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 .75rem 1.5rem rgba(0, 0, 0, 0.06);
+        }
+
+    .status-pill {
+        padding: .15rem .5rem;
+        border-radius: 999px;
+        font-size: .75rem;
+    }
+
+    .status-available {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .status-unavailable {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .severity-high {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+
+    .severity-medium {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .severity-low {
+        background: #e0f2fe;
+        color: #1d4ed8;
+    }
+
+    .system-card {
+        background: linear-gradient(135deg, #0f172a, #1f2937);
+        color: #e5e7eb;
+    }
+</style>
+
+<div class="container my-4">
+
+    @if (TempData["AdminMessage"] != null)
+    {
+        <div class="alert alert-info">
+            @TempData["AdminMessage"]
+        </div>
+    }
+
+    <!-- TOP STATS -->
+    <div class="row g-3 mb-4">
         <div class="col-md-3">
-            <div class="card shadow-sm border-0">
+            <div class="card stat-card border-0 shadow-sm">
                 <div class="card-body">
                     <h6 class="text-muted">Total Users</h6>
-                    <h3 class="fw-bold text-primary">@ViewBag.TotalUsers</h3>
-                    <small class="text-muted">All Roles</small>
+                    <h3 class="fw-bold">@Model.TotalUsers</h3>
+                    <small class="text-muted">Patients, clinicians &amp; admins</small>
                 </div>
             </div>
         </div>
-
         <div class="col-md-3">
-            <div class="card shadow-sm border-0">
+            <div class="card stat-card border-0 shadow-sm">
                 <div class="card-body">
                     <h6 class="text-muted">Patients</h6>
-                    <h3 class="fw-bold text-success">@ViewBag.PatientCount</h3>
-                    <small class="text-muted">Registered Patients</small>
+                    <h3 class="fw-bold text-primary">@Model.TotalPatients</h3>
+                    <small class="text-muted">Accounts registered as patients</small>
                 </div>
             </div>
         </div>
-
         <div class="col-md-3">
-            <div class="card shadow-sm border-0">
+            <div class="card stat-card border-0 shadow-sm">
                 <div class="card-body">
                     <h6 class="text-muted">Clinicians</h6>
-                    <h3 class="fw-bold text-info">@ViewBag.ClinicianCount</h3>
-                    <small class="text-muted">Active Clinicians</small>
+                    <h3 class="fw-bold text-success">@Model.TotalClinicians</h3>
+                    <small class="text-muted">Active clinicians in the system</small>
                 </div>
             </div>
         </div>
-
         <div class="col-md-3">
-            <div class="card shadow-sm border-0">
+            <div class="card stat-card border-0 shadow-sm system-card">
                 <div class="card-body">
-                    <h6 class="text-muted">Admins</h6>
-                    <h3 class="fw-bold text-danger">@ViewBag.AdminCount</h3>
-                    <small class="text-muted">System Administrators</small>
+                    <h6 class="text-light">System Load</h6>
+                    <div class="progress mb-2" style="height: 6px;">
+                        <div id="systemLoadBar" class="progress-bar bg-success" style="width: 40%;"></div>
+                    </div>
+                    <small id="systemLoadLabel" class="text-muted">Stable</small>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- USER MANAGEMENT -->
-    <div class="card shadow-sm border-0 mb-4">
-        <div class="card-body">
-            <div class="d-flex justify-content-between mb-3">
-                <h5 class="fw-bold">User Management</h5>
-                <a class="btn btn-primary btn-sm" href="/Admin/CreateUser">+ Create New User</a>
-            </div>
-
-            <p class="text-muted">Overview of all users in the system.</p>
-
-            <table class="table table-hover align-middle">
-                <thead class="table-light">
-                    <tr>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Role</th>
-                        <th>Status</th>
-                        <th style="width: 160px;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (users.Any())
-                    {
-                        foreach (var user in users)
-                        {
-                            <tr>
-                                <td>@user.FullName</td>
-                                <td>@user.Email</td>
-                                <td><span class="badge bg-secondary">@user.Role</span></td>
-                                <td>
-                                    @if (user.AccountStatus == "Active")
-                                    {
-                                        <span class="badge bg-success">Active</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge bg-danger">Disabled</span>
-                                    }
-                                </td>
-                                <td>
-                                    <a class="btn btn-sm btn-outline-primary" href="/Admin/EditUser/@user.UserId">Edit</a>
-                                    <a class="btn btn-sm btn-outline-warning" href="/Admin/ToggleStatus/@user.UserId">Toggle</a>
-                                </td>
-                            </tr>
-                        }
-                    }
-                    else
-                    {
-                        <tr>
-                            <td colspan="5" class="text-muted text-center">
-                                No users available.
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-
-        </div>
-    </div>
-
-    <!-- SECONDARY TOOLS ROW -->
+    <!-- SECOND ROW: USERS + APPOINTMENTS -->
     <div class="row g-4 mb-4">
-
-        <!-- SYSTEM HEALTH -->
-        <div class="col-md-6">
-            <div class="card shadow-sm border-0">
+        <!-- Patients & Clinicians -->
+        <div class="col-lg-7">
+            <div class="card border-0 shadow-sm mb-4">
                 <div class="card-body">
-                    <h5 class="fw-bold">System Health</h5>
-                    <ul class="list-group mb-3">
-                        <li class="list-group-item d-flex justify-content-between">
-                            <span>Database Status</span>
-                            <span class="text-success fw-bold">OK</span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between">
-                            <span>Last Migration</span>
-                            <span>@ViewBag.LastMigration</span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between">
-                            <span>Storage Usage</span>
-                            <span>@ViewBag.StorageUsage</span>
-                        </li>
-                    </ul>
-                    <a class="btn btn-outline-primary btn-sm" href="/Admin/HealthCheck">Run Health Check</a>
-                    <a class="btn btn-outline-secondary btn-sm" href="/Admin/ViewLogs">View Logs</a>
+                    <h5 class="fw-bold mb-3">Patients</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th style="width: 120px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var p in Model.Patients)
+                                {
+                                    <tr>
+                                        <td>@p.FullName</td>
+                                        <td>@p.Email</td>
+                                        <td>
+                                            <form asp-action="DeletePatient" method="post" class="d-inline"
+                                                  onsubmit="return confirm('Delete this patient and their data?');">
+                                                <input type="hidden" name="id" value="@p.Id" />
+                                                <button type="submit" class="btn btn-outline-danger btn-sm">
+                                                    Delete
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                }
+                                @if (!Model.Patients.Any())
+                                {
+                                    <tr>
+                                        <td colspan="3" class="text-muted">No patients registered yet.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- ALERT SUMMARY -->
-        <div class="col-md-6">
-            <div class="card shadow-sm border-0">
+            <div class="card border-0 shadow-sm">
                 <div class="card-body">
-                    <h5 class="fw-bold">Alert Summary</h5>
-                    <p class="text-muted mb-2">System-wide clinical alerts generated from patient datasets.</p>
-
-                    <div class="d-flex justify-content-between">
-                        <div>
-                            <h3 class="fw-bold text-danger">@ViewBag.ActiveAlerts</h3>
-                            <small class="text-muted">Active Alerts</small>
-                        </div>
-                        <div>
-                            <h3 class="fw-bold text-success">@ViewBag.ReviewedAlerts</h3>
-                            <small class="text-muted">Reviewed Alerts</small>
-                        </div>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="fw-bold mb-0">Clinicians &amp; Availability</h5>
+                        <button class="btn btn-sm btn-outline-primary" type="button"
+                                data-bs-toggle="collapse" data-bs-target="#addClinicianForm">
+                            + Add clinician
+                        </button>
                     </div>
 
-                    <a class="btn btn-outline-danger btn-sm mt-3" href="/Admin/AllAlerts">View All Alerts</a>
+                    <div class="table-responsive mb-3">
+                        <table class="table table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Availability</th>
+                                    <th style="width: 120px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var c in Model.Clinicians)
+                                {
+                                    <tr>
+                                        <td>@c.FullName</td>
+                                        <td>@c.Email</td>
+                                        <td>
+                                            @if (c.IsAvailable)
+                                            {
+                                                <span class="status-pill status-available">Available</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="status-pill status-unavailable">Unavailable</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <form asp-action="ToggleClinicianAvailability" method="post" class="d-inline">
+                                                <input type="hidden" name="id" value="@c.Id" />
+                                                <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                    Toggle
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                }
+                                @if (!Model.Clinicians.Any())
+                                {
+                                    <tr>
+                                        <td colspan="4" class="text-muted">No clinicians registered yet.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div id="addClinicianForm" class="collapse">
+                        <hr />
+                        <h6 class="fw-bold mb-2">Add clinician to team</h6>
+                        <form asp-action="CreateClinician" method="post" class="row g-2">
+                            <div class="col-md-5">
+                                <input name="fullName" class="form-control form-control-sm" placeholder="Full name" />
+                            </div>
+                            <div class="col-md-5">
+                                <input name="email" type="email" class="form-control form-control-sm" placeholder="Email" />
+                            </div>
+                            <div class="col-md-2 d-grid">
+                                <button type="submit" class="btn btn-primary btn-sm">Add</button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
 
-    </div>
+        <!-- Appointments & Create User -->
+        <div class="col-lg-5">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body">
+                    <h5 class="fw-bold mb-3">Upcoming appointments (@Model.UpcomingAppointments)</h5>
+                    <div class="table-responsive" style="max-height: 260px; overflow-y: auto;">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Patient</th>
+                                    <th>Clinician</th>
+                                    <th>Time</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var a in Model.Appointments)
+                                {
+                                    <tr>
+                                        <td>@a.PatientName</td>
+                                        <td>@a.ClinicianName</td>
+                                        <td>@a.StartTime.ToString("dd MMM HH:mm")</td>
+                                    </tr>
+                                }
+                                @if (!Model.Appointments.Any())
+                                {
+                                    <tr>
+                                        <td colspan="3" class="text-muted">No upcoming appointments.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
 
-    <!-- DANGER ZONE -->
-    <div class="card shadow-sm border-0">
-        <div class="card-body">
-            <h5 class="fw-bold text-danger">Danger Zone</h5>
-            <p class="text-muted">Developer utilities for cleaning demo/test data.</p>
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h5 class="fw-bold mb-3">Quick create user</h5>
+                    <form asp-action="CreateUser" method="post">
+                        <div class="mb-2">
+                            <label class="form-label small">Full name</label>
+                            <input name="fullName" class="form-control form-control-sm" />
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small">Email</label>
+                            <input name="email" type="email" class="form-control form-control-sm" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small">Role</label>
+                            <select name="role" class="form-select form-select-sm">
+                                <option value="">-- Select role --</option>
+                                <option value="Patient">Patient</option>
+                                <option value="Clinician">Clinician</option>
+                                <option value="Admin">Admin</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm w-100">
+                            Add user
+                        </button>
+                    </form>
+                </div>
+            </div>
 
-            <a class="btn btn-danger btn-sm" href="/Admin/PurgeData"
-               onclick="return confirm('Are you sure you want to delete all demo data?');">
-                Purge Demo Data
-            </a>
+            <div class="card border-0 shadow-sm mt-4">
+                <div class="card-body">
+                    <h5 class="fw-bold mb-3">Schedule appointment</h5>
+                    <form asp-action="ScheduleAppointment" method="post">
+                        <div class="mb-2">
+                            <label class="form-label small">Patient name</label>
+                            <input name="patientName" class="form-control form-control-sm" />
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small">Clinician name</label>
+                            <input name="clinicianName" class="form-control form-control-sm" />
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small">Start time</label>
+                            <input name="startTime" type="datetime-local" class="form-control form-control-sm" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small">End time</label>
+                            <input name="endTime" type="datetime-local" class="form-control form-control-sm" />
+                        </div>
+                        <button type="submit" class="btn btn-outline-primary btn-sm w-100">
+                            Schedule
+                        </button>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 
+    <!-- ALERTS -->
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="fw-bold mb-0">Active alerts (@Model.OpenAlerts)</h5>
+                        <button class="btn btn-sm btn-outline-danger" type="button"
+                                data-bs-toggle="collapse" data-bs-target="#createAlertForm">
+                            + Create alert
+                        </button>
+                    </div>
+
+                    <div id="createAlertForm" class="collapse mb-3">
+                        <form asp-action="CreateAlert" method="post" class="row g-2">
+                            <div class="col-md-4">
+                                <input name="patientName" class="form-control form-control-sm" placeholder="Patient name" />
+                            </div>
+                            <div class="col-md-3">
+                                <select name="severity" class="form-select form-select-sm">
+                                    <option value="">Severity</option>
+                                    <option value="Low">Low</option>
+                                    <option value="Medium">Medium</option>
+                                    <option value="High">High</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <input name="message" class="form-control form-control-sm" placeholder="Alert message" />
+                            </div>
+                            <div class="col-md-1 d-grid">
+                                <button type="submit" class="btn btn-danger btn-sm">Add</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Patient</th>
+                                    <th>Severity</th>
+                                    <th>Message</th>
+                                    <th>Raised</th>
+                                    <th style="width: 120px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var alert in Model.Alerts)
+                                {
+                                    var severityClass = alert.Severity == "High"
+                                    ? "severity-high"
+                                    : alert.Severity == "Medium"
+                                    ? "severity-medium"
+                                    : "severity-low";
+                                    <tr>
+                                        <td>@alert.PatientName</td>
+                                        <td>
+                                            <span class="status-pill @severityClass">@alert.Severity</span>
+                                        </td>
+                                        <td>@alert.Message</td>
+                                        <td>@alert.RaisedAt.ToString("dd MMM HH:mm")</td>
+                                        <td>
+                                            <form asp-action="ResolveAlert" method="post" class="d-inline">
+                                                <input type="hidden" name="id" value="@alert.Id" />
+                                                <button type="submit" class="btn btn-outline-success btn-sm">
+                                                    Resolve
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                }
+                                @if (!Model.Alerts.Any())
+                                {
+                                    <tr>
+                                        <td colspan="5" class="text-muted">No active alerts.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
+
+@section Scripts {
+    <script>
+        (function () {
+            const bar = document.getElementById('systemLoadBar');
+            const label = document.getElementById('systemLoadLabel');
+
+            function updateLoad() {
+                const value = 40 + Math.round(Math.random() * 30); // 40-70%
+                if (bar) {
+                    bar.style.width = value + '%';
+                }
+                if (label) {
+                    if (value < 50) label.textContent = 'Stable';
+                    else if (value < 65) label.textContent = 'Busy';
+                    else label.textContent = 'High load';
+                }
+            }
+
+            updateLoad();
+            setInterval(updateLoad, 3000);
+        })();
+    </script>
+}
