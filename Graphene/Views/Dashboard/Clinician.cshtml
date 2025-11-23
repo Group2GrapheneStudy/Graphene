@@ -1,50 +1,356 @@
-﻿@{
+﻿@model GrapheneTrace.Web.Controllers.DashboardController.ClinicianViewModel
+@{
     ViewData["Title"] = "Clinician Dashboard";
 }
-<div class="row g-3">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-body">
-                <h3 class="card-title mb-3">Clinician Dashboard</h3>
-                <p class="text-muted">Placeholder for patient list, alerts, comparisons.</p>
 
-                <div class="row g-3">
-                    <div class="col-lg-4">
-                        <div class="card border-0 shadow-sm h-100">
-                            <div class="card-body">
-                                <h5 class="card-title">Assigned Patients</h5>
-                                <ul class="mb-0">
-                                    <li>Patient A — <span class="text-danger">Flagged</span></li>
-                                    <li>Patient B — Stable</li>
-                                    <li>Patient C — Review</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-lg-4">
-                        <div class="card border-0 shadow-sm h-100">
-                            <div class="card-body">
-                                <h5 class="card-title">Recent Alerts</h5>
-                                <ul class="mb-0">
-                                    <li>High pressure event (A) — 10:42</li>
-                                    <li>Sensor dropout (C) — 09:15</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-lg-4">
-                        <div class="card border-0 shadow-sm h-100">
-                            <div class="card-body">
-                                <h5 class="card-title">Quick Actions</h5>
-                                <a class="btn btn-primary btn-sm mb-2" href="#">Compare Patients</a><br />
-                                <a class="btn btn-outline-secondary btn-sm" href="#">Generate Report</a>
-                            </div>
-                        </div>
+<style>
+    .stat-card {
+        transition: transform .15s ease, box-shadow .15s ease;
+    }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 .75rem 1.5rem rgba(0, 0, 0, 0.06);
+        }
+
+    .status-pill {
+        padding: .15rem .5rem;
+        border-radius: 999px;
+        font-size: .75rem;
+    }
+
+    .severity-high {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+
+    .severity-medium {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .severity-low {
+        background: #e0f2fe;
+        color: #1d4ed8;
+    }
+
+    .badge-light-muted {
+        background-color: #f3f4f6;
+        color: #4b5563;
+    }
+</style>
+
+<div class="container my-4">
+
+    @if (TempData["ClinicianMessage"] != null)
+    {
+        <div class="alert alert-info">
+            @TempData["ClinicianMessage"]
+        </div>
+    }
+
+    <!-- CLINICIAN SELECTOR -->
+    <div class="row mb-3">
+        <div class="col-md-8">
+            <h2 class="fw-bold mb-1">Clinician dashboard</h2>
+            <p class="text-muted mb-0">
+                View workload, alerts and prescriptions for a specific clinician.
+            </p>
+        </div>
+        <div class="col-md-4">
+            <form asp-action="Clinician" method="get" class="d-flex align-items-end gap-2">
+                <div class="flex-grow-1">
+                    <label class="form-label small mb-1">Clinician on duty</label>
+                    <select name="selectedClinician" class="form-select form-select-sm">
+                        @foreach (var c in Model.Clinicians)
+                        {
+                            <option value="@c" selected="@(c == Model.SelectedClinician ? "selected" : null)">
+                                @c
+                            </option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <button type="submit" class="btn btn-primary btn-sm mb-1">View</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- TOP CARDS: APPOINTMENTS + ALERT SUMMARY -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card stat-card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted">Today&apos;s appointments</h6>
+                    <h3 class="fw-bold">@Model.TodayAppointmentsCount</h3>
+                    <small class="text-muted">For @DateTime.Today.ToString("dd MMM yyyy") (@Model.SelectedClinician)</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card stat-card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted">Upcoming appointments</h6>
+                    <h3 class="fw-bold text-primary">@Model.UpcomingAppointmentsCount</h3>
+                    <small class="text-muted">From tomorrow onwards</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card stat-card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted">Active alerts (their patients)</h6>
+                    <h3 class="fw-bold">@Model.ActiveAlerts.Count</h3>
+                    <div class="d-flex gap-2 mt-2 small">
+                        <span class="badge severity-high">High: @Model.HighAlerts</span>
+                        <span class="badge severity-medium">Medium: @Model.MediumAlerts</span>
+                        <span class="badge severity-low">Low: @Model.LowAlerts</span>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
 
-                <hr class="my-4" />
-                <a class="btn btn-outline-primary" href="#">Open Comments</a>
+    <!-- MAIN ROW: APPOINTMENTS + PRESCRIPTIONS & APPT CREATION -->
+    <div class="row g-4 mb-4">
+        <!-- APPOINTMENTS -->
+        <div class="col-lg-7">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body">
+                    <h5 class="fw-bold mb-3">Today&apos;s appointments</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Patient</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var a in Model.TodayAppointments)
+                                {
+                                    <tr>
+                                        <td>@a.StartTime.ToString("HH:mm")</td>
+                                        <td>@a.PatientName</td>
+                                    </tr>
+                                }
+                                @if (!Model.TodayAppointments.Any())
+                                {
+                                    <tr>
+                                        <td colspan="2" class="text-muted">No appointments today.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h5 class="fw-bold mb-3">Upcoming appointments</h5>
+                    <div class="table-responsive" style="max-height: 260px; overflow-y: auto;">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Time</th>
+                                    <th>Patient</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var a in Model.UpcomingAppointments)
+                                {
+                                    <tr>
+                                        <td>@a.StartTime.ToString("dd MMM")</td>
+                                        <td>@a.StartTime.ToString("HH:mm")</td>
+                                        <td>@a.PatientName</td>
+                                    </tr>
+                                }
+                                @if (!Model.UpcomingAppointments.Any())
+                                {
+                                    <tr>
+                                        <td colspan="3" class="text-muted">No upcoming appointments scheduled.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PRESCRIPTIONS + PATIENT LIST + CLINICIAN APPOINTMENT CREATION -->
+        <div class="col-lg-5">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body">
+                    <h5 class="fw-bold mb-3">Write prescription</h5>
+                    <form asp-action="CreatePrescription" method="post">
+                        <input type="hidden" name="clinicianName" value="@Model.SelectedClinician" />
+                        <div class="mb-2">
+                            <label class="form-label small">Patient name</label>
+                            <input name="patientName" class="form-control form-control-sm"
+                                   list="clinician-patients-list" />
+                            <datalist id="clinician-patients-list">
+                                @foreach (var p in Model.Patients)
+                                {
+                                    <option value="@p"></option>
+                                }
+                            </datalist>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small">Medication</label>
+                            <input name="medication" class="form-control form-control-sm" />
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small">Dosage</label>
+                            <input name="dosage" class="form-control form-control-sm" placeholder="e.g. 10mg twice daily" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small">Notes (optional)</label>
+                            <textarea name="notes" rows="2" class="form-control form-control-sm"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm w-100">
+                            Record prescription
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body">
+                    <h5 class="fw-bold mb-3">Schedule appointment for @Model.SelectedClinician</h5>
+                    <form asp-action="ScheduleAppointment" method="post">
+                        <input type="hidden" name="clinicianName" value="@Model.SelectedClinician" />
+                        <div class="mb-2">
+                            <label class="form-label small">Patient name</label>
+                            <input name="patientName" class="form-control form-control-sm"
+                                   list="clinician-patients-list" />
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small">Start time</label>
+                            <input name="startTime" type="datetime-local" class="form-control form-control-sm" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small">End time</label>
+                            <input name="endTime" type="datetime-local" class="form-control form-control-sm" />
+                        </div>
+                        <button type="submit" class="btn btn-outline-primary btn-sm w-100">
+                            Schedule
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h5 class="fw-bold mb-3">Current patients for @Model.SelectedClinician</h5>
+                    @if (Model.Patients.Any())
+                    {
+                        <div class="d-flex flex-wrap gap-2">
+                            @foreach (var p in Model.Patients)
+                            {
+                                <span class="badge badge-light-muted">@p</span>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-muted small mb-0">
+                            Patients will appear here once appointments are booked.
+                        </p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ALERTS SECTION -->
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="fw-bold mb-0">Active alerts (@Model.ActiveAlerts.Count)</h5>
+                        <button class="btn btn-sm btn-outline-danger" type="button"
+                                data-bs-toggle="collapse" data-bs-target="#createAlertForm">
+                            + Create alert
+                        </button>
+                    </div>
+
+                    <div id="createAlertForm" class="collapse mb-3">
+                        <form asp-action="CreateAlert" method="post" class="row g-2">
+                            <div class="col-md-4">
+                                <input name="patientName"
+                                       class="form-control form-control-sm"
+                                       placeholder="Patient name"
+                                       list="clinician-patients-list" />
+                            </div>
+                            <div class="col-md-3">
+                                <select name="severity" class="form-select form-select-sm">
+                                    <option value="">Severity</option>
+                                    <option value="Low">Low</option>
+                                    <option value="Medium">Medium</option>
+                                    <option value="High">High</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <input name="message" class="form-control form-control-sm" placeholder="Alert message" />
+                            </div>
+                            <div class="col-md-1 d-grid">
+                                <button type="submit" class="btn btn-danger btn-sm">Add</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Patient</th>
+                                    <th>Severity</th>
+                                    <th>Message</th>
+                                    <th>Raised</th>
+                                    <th style="width: 120px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var alert in Model.ActiveAlerts)
+                                {
+                                    var severityClass = alert.Severity == "High"
+                                    ? "severity-high"
+                                    : alert.Severity == "Medium"
+                                    ? "severity-medium"
+                                    : "severity-low";
+                                    <tr>
+                                        <td>@alert.PatientName</td>
+                                        <td>
+                                            <span class="status-pill @severityClass">@alert.Severity</span>
+                                        </td>
+                                        <td>@alert.Message</td>
+                                        <td>@alert.RaisedAt.ToString("dd MMM HH:mm")</td>
+                                        <td>
+                                            <form asp-action="ResolveAlert" method="post" class="d-inline">
+                                                <input type="hidden" name="id" value="@alert.Id" />
+                                                <button type="submit" class="btn btn-outline-success btn-sm">
+                                                    Resolve
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                }
+                                @if (!Model.ActiveAlerts.Any())
+                                {
+                                    <tr>
+                                        <td colspan="5" class="text-muted">No active alerts for these patients.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                </div>
             </div>
         </div>
     </div>

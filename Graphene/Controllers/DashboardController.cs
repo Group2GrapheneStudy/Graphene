@@ -46,6 +46,17 @@ namespace GrapheneTrace.Web.Controllers
             public bool IsResolved { get; set; }
         }
 
+        public class PrescriptionItem
+        {
+            public int Id { get; set; }
+            public string PatientName { get; set; } = string.Empty;
+            public string ClinicianName { get; set; } = string.Empty;
+            public string Medication { get; set; } = string.Empty;
+            public string Dosage { get; set; } = string.Empty;
+            public string Notes { get; set; } = string.Empty;
+            public DateTime CreatedAt { get; set; }
+        }
+
         public class ClinicianWorkloadInfo
         {
             public string Name { get; set; } = string.Empty;
@@ -57,6 +68,16 @@ namespace GrapheneTrace.Web.Controllers
         {
             public string PatientName { get; set; } = string.Empty;
             public int OpenAlertCount { get; set; }
+        }
+
+        public class PatientFeedbackItem
+        {
+            public int Id { get; set; }
+            public string PatientName { get; set; } = string.Empty;
+            public string ClinicianName { get; set; } = string.Empty;
+            public int Rating { get; set; } // 1–5
+            public string Comment { get; set; } = string.Empty;
+            public DateTime CreatedAt { get; set; }
         }
 
         public class AdminViewModel
@@ -93,6 +114,45 @@ namespace GrapheneTrace.Web.Controllers
 
             // Audit log (last few admin actions)
             public IEnumerable<string> AdminLog { get; set; } = Enumerable.Empty<string>();
+        }
+
+        public class ClinicianViewModel
+        {
+            public string ClinicianName { get; set; } = string.Empty;
+            public string SelectedClinician { get; set; } = string.Empty;
+            public List<string> Clinicians { get; set; } = new();
+
+            public int TodayAppointmentsCount { get; set; }
+            public int UpcomingAppointmentsCount { get; set; }
+
+            public List<AppointmentItem> TodayAppointments { get; set; } = new();
+            public List<AppointmentItem> UpcomingAppointments { get; set; } = new();
+
+            public List<string> Patients { get; set; } = new();
+
+            public List<AlertItem> ActiveAlerts { get; set; } = new();
+            public int HighAlerts { get; set; }
+            public int MediumAlerts { get; set; }
+            public int LowAlerts { get; set; }
+
+            public List<PrescriptionItem> Prescriptions { get; set; } = new();
+        }
+
+        public class PatientViewModel
+        {
+            public string PatientName { get; set; } = string.Empty;
+
+            public List<AppointmentItem> UpcomingAppointments { get; set; } = new();
+            public List<PrescriptionItem> Prescriptions { get; set; } = new();
+
+            public List<AlertItem> ActiveAlerts { get; set; } = new();
+            public List<AlertItem> RecentAlerts { get; set; } = new();
+
+            public int PressureRiskScore { get; set; } // 0–100
+            public string PressureRiskLabel { get; set; } = string.Empty;
+            public List<int> PressureTrend { get; set; } = new(); // simple numbers for UI
+
+            public List<PatientFeedbackItem> MyFeedback { get; set; } = new();
         }
 
         // ----------------- DEMO DATA -----------------
@@ -158,9 +218,15 @@ namespace GrapheneTrace.Web.Controllers
             }
         };
 
+        private static readonly List<PrescriptionItem> _prescriptions = new();
+
+        private static readonly List<PatientFeedbackItem> _feedbacks = new();
+
         private static int _nextUserId = _users.Count == 0 ? 1 : _users.Max(u => u.Id) + 1;
         private static int _nextAppointmentId = _appointments.Count == 0 ? 1 : _appointments.Max(a => a.Id) + 1;
         private static int _nextAlertId = _alerts.Count == 0 ? 1 : _alerts.Max(a => a.Id) + 1;
+        private static int _nextPrescriptionId = 1;
+        private static int _nextFeedbackId = 1;
 
         // System settings (configurable on admin screen)
         private static int _highPressureThreshold = 80;
@@ -173,14 +239,13 @@ namespace GrapheneTrace.Web.Controllers
         {
             var entry = $"{DateTime.Now:dd MMM HH:mm} - {message}";
             _adminLog.Add(entry);
-            // Keep last 50 entries only
             if (_adminLog.Count > 50)
             {
                 _adminLog.RemoveAt(0);
             }
         }
 
-        // ----------------- PATIENT & CLINICIAN DASHBOARDS -----------------
+        // ----------------- PATIENT DASHBOARD -----------------
         public IActionResult Patient()
         {
             if (!(IsPatient || IsClinician || IsAdmin))
@@ -188,19 +253,165 @@ namespace GrapheneTrace.Web.Controllers
                 return RedirectToAction("AccessDenied", "Account");
             }
 
+            // We assume the patient name stored in session matches the names used in appointments/prescriptions.
+            var patientName = HttpContext.Session.GetString("UserName") ?? "Patient";
+
+            var today = DateTime.Today;
+
+            var upcomingAppointments = _appointments
+                .Where(a => a.PatientName == patientName && a.StartTime >= today)
+                .OrderBy(a => a.StartTime)
+                .ToList();
+
+            var prescriptions = _prescriptions
+                .Where(p => p.PatientName == patientName)
+                .OrderByDescending(p => p.CreatedAt)
+                .Take(10)
+                .ToList();
+
+            var activeAlerts = _alerts
+                .Where(a => a.PatientName == patientName && !a.IsResolved)
+                .OrderByDescending(a => a.RaisedAt)
+                .ToList();
+
+            var recentAlerts = _alerts
+                .Where(a => a.PatientName == patientName)
+                .OrderByDescending(a => a.RaisedAt)
+                .Take(5)
+                .ToList();
+
+            // Simple "pressure risk score" based on active alerts
+            var highCount = activeAlerts.Count(a => a.Severity == "High");
+            var medCount = activeAlerts.Count(a => a.Severity == "Medium");
+            var lowCount = activeAlerts.Count(a => a.Severity == "Low");
+
+            var score = highCount * 30 + medCount * 15 + lowCount * 5;
+            if (score > 100) score = 100;
+
+            string riskLabel;
+            if (score >= 70) riskLabel = "High risk – please follow repositioning advice and contact your clinician.";
+            else if (score >= 40) riskLabel = "Moderate risk – keep an eye on your posture and pressure areas.";
+            else riskLabel = "Low risk – readings look OK, continue normal care.";
+
+            // Simple synthetic pressure trend (for UI effect)
+            var pressureTrend = new List<int>();
+            var baseValue = 40 + highCount * 10 + medCount * 5;
+            var random = new Random(patientName.GetHashCode());
+            for (int i = 0; i < 7; i++)
+            {
+                var jitter = random.Next(-5, 6);
+                var val = Math.Clamp(baseValue + jitter + i, 30, 95);
+                pressureTrend.Add(val);
+            }
+
+            var myFeedback = _feedbacks
+                .Where(f => f.PatientName == patientName)
+                .OrderByDescending(f => f.CreatedAt)
+                .Take(10)
+                .ToList();
+
+            var vm = new PatientViewModel
+            {
+                PatientName = patientName,
+                UpcomingAppointments = upcomingAppointments,
+                Prescriptions = prescriptions,
+                ActiveAlerts = activeAlerts,
+                RecentAlerts = recentAlerts,
+                PressureRiskScore = score,
+                PressureRiskLabel = riskLabel,
+                PressureTrend = pressureTrend,
+                MyFeedback = myFeedback
+            };
+
             ViewData["Title"] = "Patient Dashboard";
-            return View();
+            return View(vm);
         }
 
-        public IActionResult Clinician()
+        // ----------------- CLINICIAN DASHBOARD -----------------
+        public IActionResult Clinician(string? selectedClinician)
         {
             if (!(IsClinician || IsAdmin))
             {
                 return RedirectToAction("AccessDenied", "Account");
             }
 
+            var clinicianNames = _users
+                .Where(u => u.Role == "Clinician" && u.IsActive)
+                .Select(u => u.FullName)
+                .OrderBy(n => n)
+                .ToList();
+
+            string effectiveClinician;
+            if (!string.IsNullOrWhiteSpace(selectedClinician) && clinicianNames.Contains(selectedClinician))
+            {
+                effectiveClinician = selectedClinician;
+            }
+            else
+            {
+                var sessionName = HttpContext.Session.GetString("UserName");
+                if (!string.IsNullOrWhiteSpace(sessionName) && clinicianNames.Contains(sessionName))
+                {
+                    effectiveClinician = sessionName;
+                }
+                else
+                {
+                    effectiveClinician = clinicianNames.FirstOrDefault() ?? "Clinician";
+                }
+            }
+
+            var today = DateTime.Today;
+
+            var todayAppointments = _appointments
+                .Where(a => a.ClinicianName == effectiveClinician && a.StartTime.Date == today)
+                .OrderBy(a => a.StartTime)
+                .ToList();
+
+            var upcomingAppointments = _appointments
+                .Where(a => a.ClinicianName == effectiveClinician && a.StartTime.Date > today)
+                .OrderBy(a => a.StartTime)
+                .ToList();
+
+            var patientNames = todayAppointments
+                .Concat(upcomingAppointments)
+                .Select(a => a.PatientName)
+                .Distinct()
+                .OrderBy(n => n)
+                .ToList();
+
+            var activeAlerts = _alerts
+                .Where(a => !a.IsResolved && patientNames.Contains(a.PatientName))
+                .OrderByDescending(a => a.RaisedAt)
+                .ToList();
+
+            var highAlerts = activeAlerts.Count(a => a.Severity == "High");
+            var mediumAlerts = activeAlerts.Count(a => a.Severity == "Medium");
+            var lowAlerts = activeAlerts.Count(a => a.Severity == "Low");
+
+            var myPrescriptions = _prescriptions
+                .Where(p => p.ClinicianName == effectiveClinician)
+                .OrderByDescending(p => p.CreatedAt)
+                .Take(10)
+                .ToList();
+
+            var vm = new ClinicianViewModel
+            {
+                ClinicianName = effectiveClinician,
+                SelectedClinician = effectiveClinician,
+                Clinicians = clinicianNames,
+                TodayAppointments = todayAppointments,
+                UpcomingAppointments = upcomingAppointments,
+                TodayAppointmentsCount = todayAppointments.Count,
+                UpcomingAppointmentsCount = upcomingAppointments.Count,
+                Patients = patientNames,
+                ActiveAlerts = activeAlerts,
+                HighAlerts = highAlerts,
+                MediumAlerts = mediumAlerts,
+                LowAlerts = lowAlerts,
+                Prescriptions = myPrescriptions
+            };
+
             ViewData["Title"] = "Clinician Dashboard";
-            return View();
+            return View(vm);
         }
 
         // ----------------- ADMIN DASHBOARD (MAIN PANEL) -----------------
@@ -212,21 +423,18 @@ namespace GrapheneTrace.Web.Controllers
                 return RedirectToAction("AccessDenied", "Account");
             }
 
-            // base user query: optionally hide inactive
             IEnumerable<AdminUserSummary> userQuery = _users;
             if (!showInactive)
             {
                 userQuery = userQuery.Where(u => u.IsActive);
             }
 
-            // role filter
             if (!string.IsNullOrEmpty(roleFilter) && roleFilter != "All")
             {
                 userQuery = userQuery.Where(u =>
                     u.Role.Equals(roleFilter, StringComparison.OrdinalIgnoreCase));
             }
 
-            // search
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var s = search.Trim();
@@ -246,7 +454,6 @@ namespace GrapheneTrace.Web.Controllers
                 .OrderBy(a => a.StartTime)
                 .ToList();
 
-            // Alert analytics
             var alertsToday = openAlerts.Count(a => a.RaisedAt.Date == today);
             var highAlerts = openAlerts.Count(a => a.Severity == "High");
             var mediumAlerts = openAlerts.Count(a => a.Severity == "Medium");
@@ -263,7 +470,6 @@ namespace GrapheneTrace.Web.Controllers
                 .Take(3)
                 .ToList();
 
-            // Clinician workload
             var clinicianWorkload = clinicians
                 .Select(c =>
                 {
@@ -388,8 +594,10 @@ namespace GrapheneTrace.Web.Controllers
 
                 _appointments.RemoveAll(a => a.PatientName == patient.FullName);
                 _alerts.RemoveAll(a => a.PatientName == patient.FullName);
+                _prescriptions.RemoveAll(p => p.PatientName == patient.FullName);
+                _feedbacks.RemoveAll(f => f.PatientName == patient.FullName);
 
-                LogAdmin($"Deleted patient '{patient.FullName}' and related appointments/alerts.");
+                LogAdmin($"Deleted patient '{patient.FullName}' and related data.");
                 TempData["AdminMessage"] = $"Patient '{patient.FullName}' has been removed from the system.";
             }
 
@@ -414,11 +622,11 @@ namespace GrapheneTrace.Web.Controllers
             return RedirectToAction("Admin");
         }
 
-        // ----------------- ACTIONS: SCHEDULE APPOINTMENT -----------------
+        // ----------------- ACTIONS: SCHEDULE APPOINTMENT (ADMIN + CLINICIAN) -----------------
         [HttpPost]
         public IActionResult ScheduleAppointment(string patientName, string clinicianName, DateTime startTime, DateTime endTime)
         {
-            if (!IsAdmin)
+            if (!IsAdmin && !IsClinician)
                 return RedirectToAction("AccessDenied", "Account");
 
             if (string.IsNullOrWhiteSpace(patientName) ||
@@ -427,8 +635,16 @@ namespace GrapheneTrace.Web.Controllers
                 endTime == default ||
                 endTime <= startTime)
             {
-                TempData["AdminMessage"] = "Please provide valid appointment details.";
-                return RedirectToAction("Admin");
+                if (IsAdmin)
+                {
+                    TempData["AdminMessage"] = "Please provide valid appointment details.";
+                    return RedirectToAction("Admin");
+                }
+                else
+                {
+                    TempData["ClinicianMessage"] = "Please provide valid appointment details.";
+                    return RedirectToAction("Clinician", new { selectedClinician = clinicianName });
+                }
             }
 
             var appointment = new AppointmentItem
@@ -443,9 +659,17 @@ namespace GrapheneTrace.Web.Controllers
 
             _appointments.Add(appointment);
             LogAdmin($"Scheduled appointment for {appointment.PatientName} with {appointment.ClinicianName}.");
-            TempData["AdminMessage"] = $"Appointment scheduled for {patientName} with {clinicianName}.";
 
-            return RedirectToAction("Admin");
+            if (IsAdmin)
+            {
+                TempData["AdminMessage"] = $"Appointment scheduled for {patientName} with {clinicianName}.";
+                return RedirectToAction("Admin");
+            }
+            else
+            {
+                TempData["ClinicianMessage"] = $"Appointment scheduled for {patientName}.";
+                return RedirectToAction("Clinician", new { selectedClinician = clinicianName });
+            }
         }
 
         // ----------------- ACTIONS: TOGGLE CLINICIAN AVAILABILITY -----------------
@@ -467,11 +691,11 @@ namespace GrapheneTrace.Web.Controllers
             return RedirectToAction("Admin");
         }
 
-        // ----------------- ACTIONS: RESOLVE ALERT -----------------
+        // ----------------- ACTIONS: RESOLVE ALERT (ADMIN + CLINICIAN) -----------------
         [HttpPost]
         public IActionResult ResolveAlert(int id)
         {
-            if (!IsAdmin)
+            if (!IsAdmin && !IsClinician)
                 return RedirectToAction("AccessDenied", "Account");
 
             var alert = _alerts.FirstOrDefault(a => a.Id == id);
@@ -479,25 +703,43 @@ namespace GrapheneTrace.Web.Controllers
             {
                 alert.IsResolved = true;
                 LogAdmin($"Resolved alert #{alert.Id} for {alert.PatientName}.");
-                TempData["AdminMessage"] = $"Alert for {alert.PatientName} has been marked as resolved.";
+
+                if (IsAdmin)
+                {
+                    TempData["AdminMessage"] = $"Alert for {alert.PatientName} has been marked as resolved.";
+                    return RedirectToAction("Admin");
+                }
+                else
+                {
+                    TempData["ClinicianMessage"] = $"Alert for {alert.PatientName} has been marked as resolved.";
+                    return RedirectToAction("Clinician");
+                }
             }
 
-            return RedirectToAction("Admin");
+            return IsAdmin ? RedirectToAction("Admin") : RedirectToAction("Clinician");
         }
 
-        // ----------------- ACTION: CREATE ALERT -----------------
+        // ----------------- ACTION: CREATE ALERT (ADMIN + CLINICIAN) -----------------
         [HttpPost]
         public IActionResult CreateAlert(string patientName, string severity, string message)
         {
-            if (!IsAdmin)
+            if (!IsAdmin && !IsClinician)
                 return RedirectToAction("AccessDenied", "Account");
 
             if (string.IsNullOrWhiteSpace(patientName) ||
                 string.IsNullOrWhiteSpace(severity) ||
                 string.IsNullOrWhiteSpace(message))
             {
-                TempData["AdminMessage"] = "Please fill in all alert details.";
-                return RedirectToAction("Admin");
+                if (IsAdmin)
+                {
+                    TempData["AdminMessage"] = "Please fill in all alert details.";
+                    return RedirectToAction("Admin");
+                }
+                else
+                {
+                    TempData["ClinicianMessage"] = "Please fill in all alert details.";
+                    return RedirectToAction("Clinician");
+                }
             }
 
             var alert = new AlertItem
@@ -512,12 +754,91 @@ namespace GrapheneTrace.Web.Controllers
 
             _alerts.Add(alert);
             LogAdmin($"Created {alert.Severity} alert for {alert.PatientName}.");
-            TempData["AdminMessage"] = $"Alert created for {patientName} ({severity}).";
 
-            return RedirectToAction("Admin");
+            if (IsAdmin)
+            {
+                TempData["AdminMessage"] = $"Alert created for {patientName} ({severity}).";
+                return RedirectToAction("Admin");
+            }
+            else
+            {
+                TempData["ClinicianMessage"] = $"Alert created for {patientName} ({severity}).";
+                return RedirectToAction("Clinician");
+            }
         }
 
-        // ----------------- ACTION: UPDATE SETTINGS -----------------
+        // ----------------- ACTION: CREATE PRESCRIPTION (CLINICIAN + ADMIN) -----------------
+        [HttpPost]
+        public IActionResult CreatePrescription(string patientName, string medication, string dosage, string? notes, string? clinicianName)
+        {
+            if (!IsClinician && !IsAdmin)
+                return RedirectToAction("AccessDenied", "Account");
+
+            var effectiveClinician = !string.IsNullOrWhiteSpace(clinicianName)
+                ? clinicianName.Trim()
+                : (HttpContext.Session.GetString("UserName") ?? "Clinician");
+
+            if (string.IsNullOrWhiteSpace(patientName) ||
+                string.IsNullOrWhiteSpace(medication) ||
+                string.IsNullOrWhiteSpace(dosage))
+            {
+                TempData["ClinicianMessage"] = "Please provide patient name, medication and dosage.";
+                return RedirectToAction("Clinician", new { selectedClinician = effectiveClinician });
+            }
+
+            var prescription = new PrescriptionItem
+            {
+                Id = _nextPrescriptionId++,
+                PatientName = patientName.Trim(),
+                ClinicianName = effectiveClinician,
+                Medication = medication.Trim(),
+                Dosage = dosage.Trim(),
+                Notes = notes?.Trim() ?? string.Empty,
+                CreatedAt = DateTime.Now
+            };
+
+            _prescriptions.Add(prescription);
+            LogAdmin($"Prescription recorded by {effectiveClinician} for {patientName}: {medication} {dosage}.");
+
+            TempData["ClinicianMessage"] = $"Prescription recorded for {patientName}.";
+            return RedirectToAction("Clinician", new { selectedClinician = effectiveClinician });
+        }
+
+        // ----------------- ACTION: PATIENT FEEDBACK -----------------
+        [HttpPost]
+        public IActionResult LeaveFeedback(string clinicianName, int rating, string comment)
+        {
+            if (!IsPatient && !IsAdmin)
+                return RedirectToAction("AccessDenied", "Account");
+
+            var patientName = HttpContext.Session.GetString("UserName") ?? "Patient";
+
+            if (string.IsNullOrWhiteSpace(clinicianName) ||
+                rating < 1 || rating > 5 ||
+                string.IsNullOrWhiteSpace(comment))
+            {
+                TempData["PatientMessage"] = "Please select clinician, rating (1-5) and enter a comment.";
+                return RedirectToAction("Patient");
+            }
+
+            var feedback = new PatientFeedbackItem
+            {
+                Id = _nextFeedbackId++,
+                PatientName = patientName,
+                ClinicianName = clinicianName.Trim(),
+                Rating = rating,
+                Comment = comment.Trim(),
+                CreatedAt = DateTime.Now
+            };
+
+            _feedbacks.Add(feedback);
+            LogAdmin($"Feedback added by {patientName} for {feedback.ClinicianName} (rating {rating}/5).");
+            TempData["PatientMessage"] = "Thank you for your feedback.";
+
+            return RedirectToAction("Patient");
+        }
+
+        // ----------------- ACTION: UPDATE SETTINGS (ADMIN) -----------------
         [HttpPost]
         public IActionResult UpdateSettings(int highPressureThreshold, int noMovementMinutes)
         {
