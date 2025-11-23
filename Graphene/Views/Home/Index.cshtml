@@ -1,133 +1,291 @@
-﻿@using System.Linq
-@{
+﻿@{
     ViewData["Title"] = "Home";
-
-    // Safe casts with fallbacks so the view never crashes
-    var roleTiles = ViewBag.RoleTiles as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
-    var notifications = ViewBag.Notifications as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
 }
 
-<div class="container mt-4">
+<style>
+    /* Simple hero styling (no keyframes ) */
+    .hero-banner {
+        background: linear-gradient(135deg, #1a73e8, #00b894, #e67e22);
+        color: #ffffff;
+        border-radius: 1.5rem;
+        padding: 2.5rem 2rem;
+    }
 
-    <!-- HERO SECTION -->
-    <div class="row mb-4">
-        <div class="col-lg-8">
-            <h1 class="display-5 fw-bold mb-3">Graphene Trace Monitoring</h1>
-            <p class="lead text-muted">
-                Welcome to the Sensore monitoring platform. Use this portal to manage
-                patient pressure data, monitor alerts, and generate clinical reports.
-            </p>
-            <a href="/Account/Login" class="btn btn-primary btn-lg me-2">Login</a>
-            <a href="#overview" class="btn btn-outline-secondary btn-lg">System Overview</a>
-        </div>
-        <div class="col-lg-4 d-flex align-items-center justify-content-lg-end mt-3 mt-lg-0">
-            <div class="card shadow-sm border-0 w-100">
-                <div class="card-body">
-                    <h5 class="fw-bold mb-3">Quick Stats</h5>
-                    <div class="d-flex justify-content-between mb-1">
-                        <span class="text-muted">Patients</span>
-                        <span class="fw-bold text-success">@ViewBag.TotalPatients</span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-1">
-                        <span class="text-muted">Clinicians</span>
-                        <span class="fw-bold text-info">@ViewBag.TotalClinicians</span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-1">
-                        <span class="text-muted">Admins</span>
-                        <span class="fw-bold text-danger">@ViewBag.TotalAdmins</span>
-                    </div>
-                    <hr />
-                    <div class="d-flex justify-content-between">
-                        <span class="text-muted">Active Alerts</span>
-                        <span class="fw-bold text-warning">@ViewBag.TotalAlerts</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    .hero-badge {
+        text-transform: uppercase;
+        letter-spacing: .15em;
+        font-size: .75rem;
+        background: rgba(0, 0, 0, 0.25);
+        border-radius: 999px;
+        padding: .25rem .75rem;
+        display: inline-block;
+    }
 
-    <!-- ROLE TILES -->
-    <section id="overview" class="mb-4">
-        <h3 class="fw-bold mb-3">Choose your portal</h3>
-        <p class="text-muted mb-3">
-            Depending on your role, you can access different areas of the system.
-        </p>
+    .feature-card {
+        transition: transform .2s ease, box-shadow .2s ease;
+    }
 
-        <div class="row g-4">
-            <div class="col-md-4">
-                <div class="card h-100 shadow-sm border-0">
-                    <div class="card-body d-flex flex-column">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h5 class="card-title fw-bold mb-0">Patient Portal</h5>
-                            <span class="badge bg-secondary">Patients</span>
-                        </div>
-                        <p class="card-text text-muted flex-grow-1">
-                            View your pressure heatmaps, alerts and comments.
-                        </p>
-                        <a href="/Account/Login?role=Patient" class="btn btn-outline-primary mt-2">
-                            Login as Patient
-                        </a>
-                    </div>
-                </div>
-            </div>
+        .feature-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 .75rem 1.5rem rgba(0, 0, 0, 0.08);
+        }
 
-            <div class="col-md-4">
-                <div class="card h-100 shadow-sm border-0">
-                    <div class="card-body d-flex flex-column">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h5 class="card-title fw-bold mb-0">Clinician Portal</h5>
-                            <span class="badge bg-secondary">Clinicians</span>
-                        </div>
-                        <p class="card-text text-muted flex-grow-1">
-                            Review patient data, alerts and generate reports.
-                        </p>
-                        <a href="/Account/Login?role=Clinician" class="btn btn-outline-primary mt-2">
-                            Login as Clinician
-                        </a>
-                    </div>
+    .heatmap-wrapper {
+        background: #0f172a;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        color: #e5e7eb;
+    }
+
+    .heatmap-grid {
+        display: grid;
+        grid-template-columns: repeat(16, 1fr);
+        gap: 2px;
+        width: 100%;
+        max-width: 380px;
+        aspect-ratio: 1 / 1;
+        margin: 0 auto;
+    }
+
+    .heatmap-cell {
+        border-radius: 2px;
+        background-color: #1f2937; /* base, will be overwritten by JS */
+        transition: background-color .3s ease;
+    }
+
+    .stat-number {
+        font-size: 1.75rem;
+        font-weight: 700;
+    }
+</style>
+
+<div class="container my-4">
+
+    <!-- HERO -->
+    <section class="hero-banner mb-5 shadow-sm">
+        <div class="row align-items-center">
+            <div class="col-lg-7 mb-4 mb-lg-0">
+                <span class="hero-badge mb-3">Graphene Trace Sensore</span>
+                <h1 class="display-5 fw-bold mb-3">Monitoring pressure, protecting skin.</h1>
+                <p class="lead mb-4">
+                    Graphene Trace turns live pressure data from the bed surface into clear heatmaps,
+                    early alerts and reports – so patients, clinicians and admins can prevent
+                    pressure injuries together.
+                </p>
+                <div class="d-flex flex-wrap gap-3">
+                    <a class="btn btn-light btn-lg" href="/Account/Login">Get started</a>
+                    <a class="btn btn-outline-light btn-lg" href="#live-preview">See live preview</a>
                 </div>
             </div>
 
-            <div class="col-md-4">
-                <div class="card h-100 shadow-sm border-0">
-                    <div class="card-body d-flex flex-column">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h5 class="card-title fw-bold mb-0">Admin Portal</h5>
-                            <span class="badge bg-secondary">Admins</span>
+            <div class="col-lg-5">
+                <div class="heatmap-wrapper shadow-sm">
+                    <h5 class="mb-2">Live pressure snapshot (demo)</h5>
+                    <p class="small text-muted mb-3">
+                        This simulated heatmap gives you a feel for how pressure shifts over time.
+                    </p>
+                    <div class="heatmap-grid">
+                        @for (var i = 0; i < 16 * 16; i++)
+                        {
+                            <div class="heatmap-cell"></div>
+                        }
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-3">
+                        <div>
+                            <span style="display:inline-block;width:20px;height:8px;border-radius:999px;background:#2563eb;"></span>
+                            <span style="display:inline-block;width:20px;height:8px;border-radius:999px;background:#22c55e;"></span>
+                            <span style="display:inline-block;width:20px;height:8px;border-radius:999px;background:#eab308;"></span>
+                            <span style="display:inline-block;width:20px;height:8px;border-radius:999px;background:#ef4444;"></span>
                         </div>
-                        <p class="card-text text-muted flex-grow-1">
-                            Manage user accounts, roles and system health.
-                        </p>
-                        <a href="/Account/Login?role=Admin" class="btn btn-outline-primary mt-2">
-                            Login as Admin
-                        </a>
+                        <small class="text-muted">Low → High pressure</small>
                     </div>
                 </div>
             </div>
         </div>
     </section>
 
+    <!-- QUICK STATS (animated counters) -->
+    <section class="mb-5">
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body">
+                        <p class="text-muted mb-1">Pressure frames analysed</p>
+                        <div class="stat-number" data-target="12000">0</div>
+                        <p class="small text-muted mb-0">Example volume in a typical week of monitoring.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body">
+                        <p class="text-muted mb-1">Alerts raised</p>
+                        <div class="stat-number" data-target="340">0</div>
+                        <p class="small text-muted mb-0">Risk notifications before pressure causes damage.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body">
+                        <p class="text-muted mb-1">Team members connected</p>
+                        <div class="stat-number" data-target="32">0</div>
+                        <p class="small text-muted mb-0">Patients, clinicians and admins working together.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
-    <!-- RECENT ACTIVITY / NOTIFICATIONS -->
-    <section class="mt-4">
-        <h3 class="fw-bold mb-3">Recent Activity</h3>
+    <!-- FEATURES -->
+    <section class="mb-5">
+        <h2 class="h3 fw-bold mb-3">Three views, one shared picture</h2>
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="card feature-card h-100 border-0 shadow-sm">
+                    <div class="card-body">
+                        <div class="mb-2 fs-3">🧑‍🦽</div>
+                        <h5 class="card-title">Patient dashboard</h5>
+                        <p class="card-text text-muted">
+                            Easy-to-understand colour maps and simple alerts guide patients on when to
+                            move, without overwhelming them with data.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card feature-card h-100 border-0 shadow-sm">
+                    <div class="card-body">
+                        <div class="mb-2 fs-3">🩺</div>
+                        <h5 class="card-title">Clinician dashboard</h5>
+                        <p class="card-text text-muted">
+                            Clinicians review trends, filter by time window, reply to patient comments
+                            and generate reports for the care record.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card feature-card h-100 border-0 shadow-sm">
+                    <div class="card-body">
+                        <div class="mb-2 fs-3">🛠️</div>
+                        <h5 class="card-title">Admin dashboard</h5>
+                        <p class="card-text text-muted">
+                            Admins manage accounts, roles and system health – making sure the platform
+                            stays secure and available 24/7.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
-        @if (notifications.Any())
-        {
-            <ul class="list-group">
-                @foreach (var item in notifications)
-                {
-                    <li class="list-group-item d-flex justify-content-between">
-                        <span>@item.Message</span>
-                        <span class="text-muted">@item.Time</span>
+    <!-- HOW IT WORKS -->
+    <section id="live-preview" class="mb-5">
+        <div class="row g-4 align-items-center">
+            <div class="col-lg-6">
+                <h2 class="h4 fw-bold mb-3">How Graphene Trace fits into care</h2>
+                <ol class="list-unstyled">
+                    <li class="mb-3">
+                        <strong>1. Sensor mat captures pressure.</strong><br />
+                        The graphene mat streams pressure frames as the patient lies or moves.
                     </li>
-                }
-            </ul>
-        }
-        else
-        {
-            <p class="text-muted">No recent activity to display.</p>
-        }
+                    <li class="mb-3">
+                        <strong>2. Platform analyses risk.</strong><br />
+                        The system tracks peaks, pressure duration and contact area to identify risk patterns.
+                    </li>
+                    <li>
+                        <strong>3. Dashboards turn data into action.</strong><br />
+                        Patients, clinicians and admins see the same story – and can act before damage occurs.
+                    </li>
+                </ol>
+            </div>
+            <div class="col-lg-6">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <h5 class="fw-bold mb-2">Inside the dashboards</h5>
+                        <p class="text-muted mb-3">
+                            Live heatmaps, alert banners, comment threads and exportable reports are
+                            all part of the Graphene Trace experience.
+                        </p>
+                        <ul class="list-group list-group-flush small">
+                            <li class="list-group-item d-flex justify-content-between">
+                                <span>Real-time heatmap view</span>
+                                <span class="badge bg-primary">Visual</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between">
+                                <span>Automatic high-risk alerts</span>
+                                <span class="badge bg-danger">Alerts</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between">
+                                <span>Patient–clinician comments</span>
+                                <span class="badge bg-secondary">Collaboration</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between">
+                                <span>Summary and trend reports</span>
+                                <span class="badge bg-success">Reports</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="mb-4">
+        <div class="rounded-4 border p-4 p-md-5 bg-light d-flex flex-column flex-md-row align-items-md-center justify-content-between">
+            <div class="mb-3 mb-md-0">
+                <h3 class="h4 fw-bold mb-1">Ready to explore Graphene Trace?</h3>
+                <p class="mb-0 text-muted">
+                    Log in or register to access your role-specific dashboard.
+                </p>
+            </div>
+            <div class="d-flex gap-2">
+                <a class="btn btn-primary btn-lg" href="/Account/Register">Create an account</a>
+                <a class="btn btn-outline-secondary btn-lg" href="/Account/Login">Log in</a>
+            </div>
+        </div>
     </section>
 
 </div>
+
+@section Scripts {
+    <script>
+        // Animated heatmap colours
+        (function () {
+            const cells = document.querySelectorAll('.heatmap-cell');
+
+            function randomiseHeatmap() {
+                cells.forEach(cell => {
+                    const v = Math.floor(Math.random() * 100); // 0–99
+                    const hue = 240 - (v * 2.4); // blue -> red
+                    cell.style.backgroundColor = `hsl(${hue}, 85%, 50%)`;
+                });
+            }
+
+            randomiseHeatmap();
+            setInterval(randomiseHeatmap, 2000);
+        })();
+
+        // Simple animated counters
+        (function () {
+            const stats = document.querySelectorAll('.stat-number');
+
+            stats.forEach(stat => {
+                const target = parseInt(stat.getAttribute('data-target'));
+                let current = 0;
+                const step = Math.max(1, Math.floor(target / 80));
+
+                const interval = setInterval(() => {
+                    current += step;
+                    if (current >= target) {
+                        current = target;
+                        clearInterval(interval);
+                    }
+                    stat.textContent = current.toString();
+                }, 30);
+            });
+        })();
+    </script>
+}
