@@ -3,11 +3,21 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Graphene_Group_Project.Data;
+using Graphene_Group_Project.Data.Entities;
 
 namespace GrapheneTrace.Web.Controllers
 {
     public class DashboardController : Controller
     {
+        // DB CONTEXT // 2
+        private readonly AppDbContext _db;
+
+        public DashboardController(AppDbContext db)
+        {
+            _db = db;
+        }
+
         // ----------------- ROLE HELPERS -----------------
         private string? UserRole => HttpContext.Session.GetString("UserRole");
 
@@ -269,6 +279,7 @@ namespace GrapheneTrace.Web.Controllers
                 .Take(10)
                 .ToList();
 
+            // Existing in-memory alerts
             var activeAlerts = _alerts
                 .Where(a => a.PatientName == patientName && !a.IsResolved)
                 .OrderByDescending(a => a.RaisedAt)
@@ -279,6 +290,40 @@ namespace GrapheneTrace.Web.Controllers
                 .OrderByDescending(a => a.RaisedAt)
                 .Take(5)
                 .ToList();
+
+            // merge DB alerts from Alert entity // 2
+            var dbPatient = _db.Patients.FirstOrDefault(p => p.FullName == patientName);
+            if (dbPatient != null)
+            {
+                var dbAlerts = _db.Alerts
+                    .Where(a => a.PatientId == dbPatient.PatientId)
+                    .OrderByDescending(a => a.TriggeredUtc)
+                    .ToList();
+
+                var dbAlertItems = dbAlerts.Select(a => new AlertItem
+                {
+                    Id = (int)a.AlertId,
+                    PatientName = patientName,
+                    Severity = a.Severity switch
+                    {
+                        3 => "High",
+                        2 => "Medium",
+                        1 => "Low",
+                        _ => "Low"
+                    },
+                    Message = a.MaxPressure.HasValue
+                        ? $"Auto alert – peak {a.MaxPressure} (pixels ≥ thr: {a.PixelsAboveThr ?? 0})."
+                        : "Auto alert from pressure sensor.",
+                    RaisedAt = a.TriggeredUtc,
+                    IsResolved = a.Status == 2
+                }).ToList();
+
+                activeAlerts.AddRange(dbAlertItems.Where(a => !a.IsResolved));
+                recentAlerts = activeAlerts
+                    .OrderByDescending(a => a.RaisedAt)
+                    .Take(5)
+                    .ToList();
+            }
 
             // Simple "pressure risk score" based on active alerts
             var highCount = activeAlerts.Count(a => a.Severity == "High");
@@ -378,10 +423,53 @@ namespace GrapheneTrace.Web.Controllers
                 .OrderBy(n => n)
                 .ToList();
 
+            // Existing in-memory alerts for this clinician's patients
             var activeAlerts = _alerts
                 .Where(a => !a.IsResolved && patientNames.Contains(a.PatientName))
                 .OrderByDescending(a => a.RaisedAt)
                 .ToList();
+
+            // merge DB alerts for those patients // 2
+            if (patientNames.Any())
+            {
+                var dbPatients = _db.Patients
+                    .Where(p => patientNames.Contains(p.FullName))
+                    .ToList();
+
+                var patientIds = dbPatients.Select(p => p.PatientId).ToList();
+
+                if (patientIds.Any())
+                {
+                    var dbAlerts = _db.Alerts
+                        .Where(a => patientIds.Contains(a.PatientId))
+                        .OrderByDescending(a => a.TriggeredUtc)
+                        .ToList();
+
+                    var dbAlertItems = dbAlerts.Select(a =>
+                    {
+                        var p = dbPatients.FirstOrDefault(p => p.PatientId == a.PatientId);
+                        return new AlertItem
+                        {
+                            Id = (int)a.AlertId,
+                            PatientName = p?.FullName ?? $"Patient #{a.PatientId}",
+                            Severity = a.Severity switch
+                            {
+                                3 => "High",
+                                2 => "Medium",
+                                1 => "Low",
+                                _ => "Low"
+                            },
+                            Message = a.MaxPressure.HasValue
+                                ? $"Auto alert – peak {a.MaxPressure} (pixels ≥ thr: {a.PixelsAboveThr ?? 0})."
+                                : "Auto alert from pressure sensor.",
+                            RaisedAt = a.TriggeredUtc,
+                            IsResolved = a.Status == 2
+                        };
+                    }).ToList();
+
+                    activeAlerts.AddRange(dbAlertItems.Where(a => !a.IsResolved));
+                }
+            }
 
             var highAlerts = activeAlerts.Count(a => a.Severity == "High");
             var mediumAlerts = activeAlerts.Count(a => a.Severity == "Medium");
