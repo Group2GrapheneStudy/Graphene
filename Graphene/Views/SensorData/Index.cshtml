@@ -1,0 +1,35 @@
+﻿@model IEnumerable<string>
+
+@{
+    ViewData["Title"] = "Sensor Sessions";
+}
+
+<div class="container my-4">
+    <h2 class="fw-bold mb-3">Sensor data sessions (CSV)</h2>
+    <p class="text-muted">
+        Each session corresponds to one CSV file in the GTLB-Data folder.
+        Click a session to preview the frames.
+    </p>
+
+    @if (!Model.Any())
+    {
+        <div class="alert alert-warning">
+            No CSV files were found in <code>wwwroot/data/GTLB-Data</code>.
+        </div>
+    }
+    else
+    {
+        <ul class="list-group">
+            @foreach (var id in Model)
+            {
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>@id</span>
+                    <a asp-action="Session" asp-route-id="@id"
+                       class="btn btn-sm btn-outline-primary">
+                        View frames
+                    </a>
+                </li>
+            }
+        </ul>
+    }
+</div>

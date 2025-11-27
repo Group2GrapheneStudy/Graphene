@@ -1,31 +1,31 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
+using GrapheneTrace.Web.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Graphene_Group_Project.Data;
-using Graphene_Group_Project.Data.Entities;
 
 namespace GrapheneTrace.Web.Controllers
 {
     public class DashboardController : Controller
     {
-        // DB CONTEXT // 2
-        private readonly AppDbContext _db;
+        // ------------- ROLE HELPERS -------------
 
-        public DashboardController(AppDbContext db)
-        {
-            _db = db;
-        }
-
-        // ----------------- ROLE HELPERS -----------------
         private string? UserRole => HttpContext.Session.GetString("UserRole");
-
         private bool IsAdmin => UserRole == "Admin";
         private bool IsClinician => UserRole == "Clinician";
         private bool IsPatient => UserRole == "Patient";
 
-        // ----------------- IN-MEMORY MODELS -----------------
+        private readonly PressureCsvService _csvService;
+
+        public DashboardController(PressureCsvService csvService)
+        {
+            _csvService = csvService;
+        }
+
+        // ------------- NESTED MODELS -------------
+
         public class AdminUserSummary
         {
             public int Id { get; set; }
@@ -34,6 +34,9 @@ namespace GrapheneTrace.Web.Controllers
             public string Role { get; set; } = string.Empty; // "Patient", "Clinician", "Admin"
             public bool IsAvailable { get; set; }            // for clinicians
             public bool IsActive { get; set; } = true;       // soft deactivation
+
+            // For patients – which clinician they are assigned to
+            public string? AssignedClinicianName { get; set; }
         }
 
         public class AppointmentItem
@@ -92,49 +95,55 @@ namespace GrapheneTrace.Web.Controllers
 
         public class AdminViewModel
         {
-            // High-level stats
+            // stats
             public int TotalUsers { get; set; }
             public int TotalPatients { get; set; }
             public int TotalClinicians { get; set; }
             public int OpenAlerts { get; set; }
             public int UpcomingAppointments { get; set; }
 
-            // Alert analytics
+            // alert analytics
             public int AlertsToday { get; set; }
             public int HighAlerts { get; set; }
             public int MediumAlerts { get; set; }
             public int LowAlerts { get; set; }
             public List<PatientAlertSummary> TopPatientsByAlerts { get; set; } = new();
 
-            // Core lists
+            // lists
             public List<AdminUserSummary> Patients { get; set; } = new();
             public List<AdminUserSummary> Clinicians { get; set; } = new();
             public List<AppointmentItem> Appointments { get; set; } = new();
             public List<AlertItem> Alerts { get; set; } = new();
             public List<ClinicianWorkloadInfo> ClinicianWorkload { get; set; } = new();
 
-            // Filters
+            // filters
             public string? Search { get; set; }
             public string? RoleFilter { get; set; }
             public bool ShowInactive { get; set; }
 
-            // Settings
+            // settings
             public int HighPressureThreshold { get; set; }
             public int NoMovementMinutes { get; set; }
 
-            // Audit log (last few admin actions)
+            // audit
             public IEnumerable<string> AdminLog { get; set; } = Enumerable.Empty<string>();
         }
 
         public class ClinicianViewModel
         {
+            public class PatientSensorSnapshot
+            {
+                public string PatientName { get; set; } = string.Empty;
+                public int? LatestPeak { get; set; }
+                public double? LatestAverage { get; set; }
+            }
+
             public string ClinicianName { get; set; } = string.Empty;
             public string SelectedClinician { get; set; } = string.Empty;
             public List<string> Clinicians { get; set; } = new();
 
             public int TodayAppointmentsCount { get; set; }
             public int UpcomingAppointmentsCount { get; set; }
-
             public List<AppointmentItem> TodayAppointments { get; set; } = new();
             public List<AppointmentItem> UpcomingAppointments { get; set; } = new();
 
@@ -146,11 +155,14 @@ namespace GrapheneTrace.Web.Controllers
             public int LowAlerts { get; set; }
 
             public List<PrescriptionItem> Prescriptions { get; set; } = new();
+            public List<PatientSensorSnapshot> PatientSensorSnapshots { get; set; } = new();
         }
 
         public class PatientViewModel
         {
             public string PatientName { get; set; } = string.Empty;
+
+            public string? AssignedClinicianName { get; set; }
 
             public List<AppointmentItem> UpcomingAppointments { get; set; } = new();
             public List<PrescriptionItem> Prescriptions { get; set; } = new();
@@ -160,85 +172,66 @@ namespace GrapheneTrace.Web.Controllers
 
             public int PressureRiskScore { get; set; } // 0–100
             public string PressureRiskLabel { get; set; } = string.Empty;
-            public List<int> PressureTrend { get; set; } = new(); // simple numbers for UI
+            public List<int> PressureTrend { get; set; } = new();
 
             public List<PatientFeedbackItem> MyFeedback { get; set; } = new();
+
+            // CSV sensor snapshot
+            public string? SensorSessionId { get; set; }
+            public int? LatestFrameIndex { get; set; }
+            public int[]? LatestFrameValues { get; set; }
+            public double? LatestFrameAverage { get; set; }
+            public int? LatestFrameMax { get; set; }
         }
 
-        // ----------------- DEMO DATA -----------------
+        // ------------- STATIC DATA (IN-MEMORY) -------------
+
+        // main user list shown in admin dashboard
         private static readonly List<AdminUserSummary> _users = new()
         {
-            new AdminUserSummary { Id = 1, FullName = "Alice Patient",   Email = "alice@example.com",   Role = "Patient",   IsAvailable = true,  IsActive = true },
-            new AdminUserSummary { Id = 2, FullName = "Bob Patient",     Email = "bob@example.com",     Role = "Patient",   IsAvailable = true,  IsActive = true },
-            new AdminUserSummary { Id = 3, FullName = "Dr. Clark",       Email = "clark@example.com",   Role = "Clinician", IsAvailable = true,  IsActive = true },
-            new AdminUserSummary { Id = 4, FullName = "Dr. Dana",        Email = "dana@example.com",    Role = "Clinician", IsAvailable = false, IsActive = true },
-            new AdminUserSummary { Id = 5, FullName = "System Admin",    Email = "admin@example.com",   Role = "Admin",     IsAvailable = true,  IsActive = true }
+            new AdminUserSummary { Id = 1, FullName = "Patient 1", Email = "patient1@example.com", Role = "Patient", IsAvailable = true,  IsActive = true, AssignedClinicianName = "Dr. Clark" },
+            new AdminUserSummary { Id = 2, FullName = "Patient 2", Email = "patient2@example.com", Role = "Patient", IsAvailable = true,  IsActive = true, AssignedClinicianName = "Dr. Clark" },
+            new AdminUserSummary { Id = 3, FullName = "Patient 3", Email = "patient3@example.com", Role = "Patient", IsAvailable = true,  IsActive = true, AssignedClinicianName = "Dr. Dana"  },
+            new AdminUserSummary { Id = 4, FullName = "Patient 4", Email = "patient4@example.com", Role = "Patient", IsAvailable = true,  IsActive = true, AssignedClinicianName = "Dr. Dana"  },
+            new AdminUserSummary { Id = 5, FullName = "Patient 5", Email = "patient5@example.com", Role = "Patient", IsAvailable = true,  IsActive = true, AssignedClinicianName = "Dr. Clark" },
+            new AdminUserSummary { Id = 6, FullName = "Dr. Clark",   Email = "clark@example.com",   Role = "Clinician", IsAvailable = true,  IsActive = true },
+            new AdminUserSummary { Id = 7, FullName = "Dr. Dana",    Email = "dana@example.com",    Role = "Clinician", IsAvailable = true,  IsActive = true },
+            new AdminUserSummary { Id = 8, FullName = "System Admin",Email = "admin@example.com",   Role = "Admin",     IsAvailable = true,  IsActive = true }
         };
 
-        private static readonly List<AppointmentItem> _appointments = new()
+        // patient → supervising clinician
+        private static readonly Dictionary<string, string> _patientClinicianMap = new()
         {
-            new AppointmentItem
-            {
-                Id = 1,
-                PatientName = "Alice Patient",
-                ClinicianName = "Dr. Clark",
-                StartTime = DateTime.Today.AddHours(10),
-                EndTime = DateTime.Today.AddHours(10.5),
-                Status = "Scheduled"
-            },
-            new AppointmentItem
-            {
-                Id = 2,
-                PatientName = "Bob Patient",
-                ClinicianName = "Dr. Dana",
-                StartTime = DateTime.Today.AddHours(14),
-                EndTime = DateTime.Today.AddHours(14.5),
-                Status = "Scheduled"
-            }
+            { "Patient 1", "Dr. Clark" },
+            { "Patient 2", "Dr. Clark" },
+            { "Patient 3", "Dr. Dana"  },
+            { "Patient 4", "Dr. Dana"  },
+            { "Patient 5", "Dr. Clark" }
         };
 
-        private static readonly List<AlertItem> _alerts = new()
+        // 5 patients → 15 CSV sessions (3 per patient)
+        private static readonly Dictionary<string, List<string>> _patientSessionMap = new()
         {
-            new AlertItem
-            {
-                Id = 1,
-                PatientName = "Alice Patient",
-                Severity = "High",
-                Message = "Sustained high pressure on left hip.",
-                RaisedAt = DateTime.Now.AddMinutes(-35),
-                IsResolved = false
-            },
-            new AlertItem
-            {
-                Id = 2,
-                PatientName = "Bob Patient",
-                Severity = "Medium",
-                Message = "No movement detected for 45 minutes.",
-                RaisedAt = DateTime.Now.AddHours(-1),
-                IsResolved = false
-            },
-            new AlertItem
-            {
-                Id = 3,
-                PatientName = "Alice Patient",
-                Severity = "Low",
-                Message = "Short peak pressure observed.",
-                RaisedAt = DateTime.Now.AddHours(-4),
-                IsResolved = true
-            }
+            { "Patient 1", new List<string> { "d13043b3_20251011", "d13043b3_20251012", "d13043b3_20251013" } },
+            { "Patient 2", new List<string> { "de0e9b2c_20251011", "de0e9b2c_20251012", "de0e9b2c_20251013" } },
+            { "Patient 3", new List<string> { "1c0fd777_20251011", "1c0fd777_20251012", "1c0fd777_20251013" } },
+            { "Patient 4", new List<string> { "71e66ab3_20251011", "71e66ab3_20251012", "71e66ab3_20251013" } },
+            { "Patient 5", new List<string> { "543d4676_20251011", "543d4676_20251012", "543d4676_20251013" } }
         };
 
+        // appointments / alerts / prescriptions / feedback
+        private static readonly List<AppointmentItem> _appointments = new();
+        private static readonly List<AlertItem> _alerts = new();
         private static readonly List<PrescriptionItem> _prescriptions = new();
-
         private static readonly List<PatientFeedbackItem> _feedbacks = new();
 
-        private static int _nextUserId = _users.Count == 0 ? 1 : _users.Max(u => u.Id) + 1;
-        private static int _nextAppointmentId = _appointments.Count == 0 ? 1 : _appointments.Max(a => a.Id) + 1;
-        private static int _nextAlertId = _alerts.Count == 0 ? 1 : _alerts.Max(a => a.Id) + 1;
+        private static int _nextUserId = _users.Max(u => u.Id) + 1;
+        private static int _nextAppointmentId = 1;
+        private static int _nextAlertId = 1;
         private static int _nextPrescriptionId = 1;
         private static int _nextFeedbackId = 1;
 
-        // System settings (configurable on admin screen)
+        // System settings
         private static int _highPressureThreshold = 80;
         private static int _noMovementMinutes = 45;
 
@@ -255,18 +248,120 @@ namespace GrapheneTrace.Web.Controllers
             }
         }
 
-        // ----------------- PATIENT DASHBOARD -----------------
-        public IActionResult Patient()
+        // Helper for AccountController: register new user into in-memory admin view
+        public static void RegisterUserFromAccount(
+            string fullName,
+            string email,
+            string role,
+            string? clinicianName)
         {
-            if (!(IsPatient || IsClinician || IsAdmin))
+            if (string.IsNullOrWhiteSpace(fullName) ||
+                string.IsNullOrWhiteSpace(email) ||
+                string.IsNullOrWhiteSpace(role))
+            {
+                return;
+            }
+
+            // avoid duplicates by email
+            if (_users.Any(u => u.Email.Equals(email, StringComparison.OrdinalIgnoreCase)))
+                return;
+
+            var user = new AdminUserSummary
+            {
+                Id = _nextUserId++,
+                FullName = fullName.Trim(),
+                Email = email.Trim(),
+                Role = role.Trim(),
+                IsAvailable = role == "Clinician",
+                IsActive = true,
+                AssignedClinicianName = role == "Patient" ? clinicianName?.Trim() : null
+            };
+
+            _users.Add(user);
+
+            if (role == "Patient" && !string.IsNullOrWhiteSpace(clinicianName))
+            {
+                _patientClinicianMap[fullName.Trim()] = clinicianName.Trim();
+            }
+        }
+
+        // Helper for AccountController: clinician dropdown during registration
+        public static List<string> GetClinicianNames()
+        {
+            return _users
+                .Where(u => u.Role == "Clinician" && u.IsActive)
+                .Select(u => u.FullName)
+                .OrderBy(n => n)
+                .ToList();
+        }
+
+        // ------------- CSV / SENSOR HELPERS -------------
+
+        // latest session ID for this patient
+        private string? GetSessionIdForPatient(string patientName)
+        {
+            if (_patientSessionMap.TryGetValue(patientName, out var list) && list.Any())
+                return list.Last(); // use latest day
+
+            return _csvService.GetSessionIds().FirstOrDefault();
+        }
+
+        // Build a 0–100 trend line from frames (downsampled)
+        private static List<int> BuildPressureTrendFromFrames(List<PressureFrameRow> frames)
+        {
+            var result = new List<int>();
+            if (frames == null || frames.Count == 0)
+                return result;
+
+            const int maxPoints = 50;
+            int step = Math.Max(1, frames.Count / maxPoints);
+
+            for (int i = 0; i < frames.Count; i += step)
+            {
+                var f = frames[i];
+                if (f.Values == null || f.Values.Length == 0) continue;
+
+                var avg = f.Values.Average();
+                var scaled = (int)Math.Clamp(avg, 0, 100);
+                result.Add(scaled);
+            }
+
+            return result;
+        }
+
+        private async Task<(int? peak, double? avg)> GetLatestFrameStatsForPatientAsync(string patientName)
+        {
+            var sessionId = GetSessionIdForPatient(patientName);
+            if (string.IsNullOrWhiteSpace(sessionId))
+                return (null, null);
+
+            var frames = await _csvService.LoadSessionAsync(sessionId);
+            var latest = frames
+                .LastOrDefault(f => f.Values != null && f.Values.Any(v => v > 0))
+                ?? frames.LastOrDefault();
+
+            if (latest == null || latest.Values == null || latest.Values.Length == 0)
+                return (null, null);
+
+            var peak = latest.Values.Max();
+            var avg = latest.Values.Average();
+            return (peak, avg);
+        }
+
+        // ------------- PATIENT DASHBOARD -------------
+
+        public async Task<IActionResult> Patient()
+        {
+            // Only actual patients should see this view
+            if (!IsPatient)
             {
                 return RedirectToAction("AccessDenied", "Account");
             }
 
-            // We assume the patient name stored in session matches the names used in appointments/prescriptions.
             var patientName = HttpContext.Session.GetString("UserName") ?? "Patient";
-
             var today = DateTime.Today;
+
+            _patientClinicianMap.TryGetValue(patientName, out var assignedClinician);
 
             var upcomingAppointments = _appointments
                 .Where(a => a.PatientName == patientName && a.StartTime >= today)
@@ -276,10 +371,9 @@ namespace GrapheneTrace.Web.Controllers
             var prescriptions = _prescriptions
                 .Where(p => p.PatientName == patientName)
                 .OrderByDescending(p => p.CreatedAt)
-                .Take(10)
+                .Take(20)
                 .ToList();
 
-            // Existing in-memory alerts
             var activeAlerts = _alerts
                 .Where(a => a.PatientName == patientName && !a.IsResolved)
                 .OrderByDescending(a => a.RaisedAt)
@@ -288,44 +382,9 @@ namespace GrapheneTrace.Web.Controllers
             var recentAlerts = _alerts
                 .Where(a => a.PatientName == patientName)
                 .OrderByDescending(a => a.RaisedAt)
-                .Take(5)
+                .Take(10)
                 .ToList();
 
-            // merge DB alerts from Alert entity // 2
-            var dbPatient = _db.Patients.FirstOrDefault(p => p.FullName == patientName);
-            if (dbPatient != null)
-            {
-                var dbAlerts = _db.Alerts
-                    .Where(a => a.PatientId == dbPatient.PatientId)
-                    .OrderByDescending(a => a.TriggeredUtc)
-                    .ToList();
-
-                var dbAlertItems = dbAlerts.Select(a => new AlertItem
-                {
-                    Id = (int)a.AlertId,
-                    PatientName = patientName,
-                    Severity = a.Severity switch
-                    {
-                        3 => "High",
-                        2 => "Medium",
-                        1 => "Low",
-                        _ => "Low"
-                    },
-                    Message = a.MaxPressure.HasValue
-                        ? $"Auto alert – peak {a.MaxPressure} (pixels ≥ thr: {a.PixelsAboveThr ?? 0})."
-                        : "Auto alert from pressure sensor.",
-                    RaisedAt = a.TriggeredUtc,
-                    IsResolved = a.Status == 2
-                }).ToList();
-
-                activeAlerts.AddRange(dbAlertItems.Where(a => !a.IsResolved));
-                recentAlerts = activeAlerts
-                    .OrderByDescending(a => a.RaisedAt)
-                    .Take(5)
-                    .ToList();
-            }
-
-            // Simple "pressure risk score" based on active alerts
             var highCount = activeAlerts.Count(a => a.Severity == "High");
             var medCount = activeAlerts.Count(a => a.Severity == "Medium");
             var lowCount = activeAlerts.Count(a => a.Severity == "Low");
@@ -334,20 +393,12 @@ namespace GrapheneTrace.Web.Controllers
             if (score > 100) score = 100;
 
             string riskLabel;
-            if (score >= 70) riskLabel = "High risk – please follow repositioning advice and contact your clinician.";
-            else if (score >= 40) riskLabel = "Moderate risk – keep an eye on your posture and pressure areas.";
-            else riskLabel = "Low risk – readings look OK, continue normal care.";
-
-            // Simple synthetic pressure trend (for UI effect)
-            var pressureTrend = new List<int>();
-            var baseValue = 40 + highCount * 10 + medCount * 5;
-            var random = new Random(patientName.GetHashCode());
-            for (int i = 0; i < 7; i++)
-            {
-                var jitter = random.Next(-5, 6);
-                var val = Math.Clamp(baseValue + jitter + i, 30, 95);
-                pressureTrend.Add(val);
-            }
+            if (score >= 70)
+                riskLabel = "High risk – please follow repositioning advice and contact your clinician.";
+            else if (score >= 40)
+                riskLabel = "Moderate risk – keep an eye on your posture and pressure areas.";
+            else
+                riskLabel = "Low risk – readings look OK, continue normal care.";
 
             var myFeedback = _feedbacks
                 .Where(f => f.PatientName == patientName)
@@ -358,27 +409,91 @@ namespace GrapheneTrace.Web.Controllers
             var vm = new PatientViewModel
             {
                 PatientName = patientName,
+                AssignedClinicianName = assignedClinician,
+
                 UpcomingAppointments = upcomingAppointments,
                 Prescriptions = prescriptions,
                 ActiveAlerts = activeAlerts,
                 RecentAlerts = recentAlerts,
                 PressureRiskScore = score,
                 PressureRiskLabel = riskLabel,
-                PressureTrend = pressureTrend,
+                PressureTrend = new List<int>(),
                 MyFeedback = myFeedback
             };
+
+            // CSV integration: snapshot + trend
+            var sessionId = GetSessionIdForPatient(patientName);
+            if (!string.IsNullOrWhiteSpace(sessionId))
+            {
+                var frames = await _csvService.LoadSessionAsync(sessionId);
+
+                var latest = frames
+                    .LastOrDefault(f => f.Values != null && f.Values.Any(v => v > 0))
+                    ?? frames.LastOrDefault();
+
+                if (latest != null && latest.Values != null && latest.Values.Length > 0)
+                {
+                    vm.SensorSessionId = sessionId;
+                    vm.LatestFrameIndex = latest.FrameIndex;
+                    vm.LatestFrameValues = latest.Values;
+                    vm.LatestFrameMax = latest.Values.Max();
+                    vm.LatestFrameAverage = latest.Values.Average();
+                }
+
+                vm.PressureTrend = BuildPressureTrendFromFrames(frames);
+            }
 
             ViewData["Title"] = "Patient Dashboard";
             return View(vm);
         }
 
-        // ----------------- CLINICIAN DASHBOARD -----------------
-        public IActionResult Clinician(string? selectedClinician)
+        // Patient books their own appointment with assigned clinician
+        [HttpPost]
+        public IActionResult BookAppointmentAsPatient(DateTime startTime, DateTime endTime)
+        {
+            if (!IsPatient)
+                return RedirectToAction("AccessDenied", "Account");
+
+            var patientName = HttpContext.Session.GetString("UserName") ?? "Patient";
+
+            if (!_patientClinicianMap.TryGetValue(patientName, out var clinicianName) ||
+                string.IsNullOrWhiteSpace(clinicianName))
+            {
+                TempData["PatientMessage"] =
+                    "You don't have an assigned clinician yet. Please contact admin or your clinic.";
+                return RedirectToAction("Patient");
+            }
+
+            if (startTime == default || endTime == default || endTime <= startTime)
+            {
+                TempData["PatientMessage"] = "Please choose a valid start and end time.";
+                return RedirectToAction("Patient");
+            }
+
+            var appt = new AppointmentItem
+            {
+                Id = _nextAppointmentId++,
+                PatientName = patientName,
+                ClinicianName = clinicianName,
+                StartTime = startTime,
+                EndTime = endTime,
+                Status = "Scheduled"
+            };
+
+            _appointments.Add(appt);
+            LogAdmin($"Patient '{patientName}' booked appointment with {clinicianName} on {startTime:dd MMM HH:mm}.");
+            TempData["PatientMessage"] =
+                $"Appointment booked with {clinicianName} on {startTime:dd MMM HH:mm}.";
+
+            return RedirectToAction("Patient");
+        }
+
+        // ------------- CLINICIAN DASHBOARD -------------
+
+        public async Task<IActionResult> Clinician(string? selectedClinician)
         {
             if (!(IsClinician || IsAdmin))
-            {
                 return RedirectToAction("AccessDenied", "Account");
-            }
 
             var clinicianNames = _users
                 .Where(u => u.Role == "Clinician" && u.IsActive)
@@ -386,6 +501,7 @@ namespace GrapheneTrace.Web.Controllers
                 .OrderBy(n => n)
                 .ToList();
 
+            // pick which clinician to show
             string effectiveClinician;
             if (!string.IsNullOrWhiteSpace(selectedClinician) && clinicianNames.Contains(selectedClinician))
             {
@@ -395,13 +511,9 @@ namespace GrapheneTrace.Web.Controllers
             {
                 var sessionName = HttpContext.Session.GetString("UserName");
                 if (!string.IsNullOrWhiteSpace(sessionName) && clinicianNames.Contains(sessionName))
-                {
                     effectiveClinician = sessionName;
-                }
                 else
-                {
                     effectiveClinician = clinicianNames.FirstOrDefault() ?? "Clinician";
-                }
             }
 
             var today = DateTime.Today;
@@ -416,60 +528,25 @@ namespace GrapheneTrace.Web.Controllers
                 .OrderBy(a => a.StartTime)
                 .ToList();
 
-            var patientNames = todayAppointments
+            // patients from appointments + patients assigned to this clinician
+            var patientFromAppointments = todayAppointments
                 .Concat(upcomingAppointments)
-                .Select(a => a.PatientName)
+                .Select(a => a.PatientName);
+
+            var patientFromAssignments = _patientClinicianMap
+                .Where(kvp => kvp.Value == effectiveClinician)
+                .Select(kvp => kvp.Key);
+
+            var patientNames = patientFromAppointments
+                .Concat(patientFromAssignments)
                 .Distinct()
                 .OrderBy(n => n)
                 .ToList();
 
-            // Existing in-memory alerts for this clinician's patients
             var activeAlerts = _alerts
                 .Where(a => !a.IsResolved && patientNames.Contains(a.PatientName))
                 .OrderByDescending(a => a.RaisedAt)
                 .ToList();
-
-            // merge DB alerts for those patients // 2
-            if (patientNames.Any())
-            {
-                var dbPatients = _db.Patients
-                    .Where(p => patientNames.Contains(p.FullName))
-                    .ToList();
-
-                var patientIds = dbPatients.Select(p => p.PatientId).ToList();
-
-                if (patientIds.Any())
-                {
-                    var dbAlerts = _db.Alerts
-                        .Where(a => patientIds.Contains(a.PatientId))
-                        .OrderByDescending(a => a.TriggeredUtc)
-                        .ToList();
-
-                    var dbAlertItems = dbAlerts.Select(a =>
-                    {
-                        var p = dbPatients.FirstOrDefault(p => p.PatientId == a.PatientId);
-                        return new AlertItem
-                        {
-                            Id = (int)a.AlertId,
-                            PatientName = p?.FullName ?? $"Patient #{a.PatientId}",
-                            Severity = a.Severity switch
-                            {
-                                3 => "High",
-                                2 => "Medium",
-                                1 => "Low",
-                                _ => "Low"
-                            },
-                            Message = a.MaxPressure.HasValue
-                                ? $"Auto alert – peak {a.MaxPressure} (pixels ≥ thr: {a.PixelsAboveThr ?? 0})."
-                                : "Auto alert from pressure sensor.",
-                            RaisedAt = a.TriggeredUtc,
-                            IsResolved = a.Status == 2
-                        };
-                    }).ToList();
-
-                    activeAlerts.AddRange(dbAlertItems.Where(a => !a.IsResolved));
-                }
-            }
 
             var highAlerts = activeAlerts.Count(a => a.Severity == "High");
             var mediumAlerts = activeAlerts.Count(a => a.Severity == "Medium");
@@ -478,8 +555,20 @@ namespace GrapheneTrace.Web.Controllers
             var myPrescriptions = _prescriptions
                 .Where(p => p.ClinicianName == effectiveClinician)
                 .OrderByDescending(p => p.CreatedAt)
-                .Take(10)
+                .Take(20)
                 .ToList();
+
+            var sensorSnapshots = new List<ClinicianViewModel.PatientSensorSnapshot>();
+            foreach (var pName in patientNames)
+            {
+                var (peak, avg) = await GetLatestFrameStatsForPatientAsync(pName);
+                sensorSnapshots.Add(new ClinicianViewModel.PatientSensorSnapshot
+                {
+                    PatientName = pName,
+                    LatestPeak = peak,
+                    LatestAverage = avg
+                });
+            }
 
             var vm = new ClinicianViewModel
             {
@@ -495,21 +584,21 @@ namespace GrapheneTrace.Web.Controllers
                 HighAlerts = highAlerts,
                 MediumAlerts = mediumAlerts,
                 LowAlerts = lowAlerts,
-                Prescriptions = myPrescriptions
+                Prescriptions = myPrescriptions,
+                PatientSensorSnapshots = sensorSnapshots
             };
 
             ViewData["Title"] = "Clinician Dashboard";
             return View(vm);
         }
 
-        // ----------------- ADMIN DASHBOARD (MAIN PANEL) -----------------
+        // ------------- ADMIN DASHBOARD -------------
+
         [HttpGet]
         public IActionResult Admin(string? search, string? roleFilter, bool showInactive = false)
         {
             if (!IsAdmin)
-            {
                 return RedirectToAction("AccessDenied", "Account");
-            }
 
             IEnumerable<AdminUserSummary> userQuery = _users;
             if (!showInactive)
@@ -606,7 +695,8 @@ namespace GrapheneTrace.Web.Controllers
             return View(vm);
         }
 
-        // ----------------- ACTIONS: CREATE USER (GENERIC) -----------------
+        // ------------- ADMIN / CLINICIAN ACTIONS -------------
+
         [HttpPost]
         public IActionResult CreateUser(string fullName, string email, string role)
         {
@@ -638,7 +728,6 @@ namespace GrapheneTrace.Web.Controllers
             return RedirectToAction("Admin");
         }
 
-        // ----------------- ACTION: QUICK ADD CLINICIAN -----------------
         [HttpPost]
         public IActionResult CreateClinician(string fullName, string email)
         {
@@ -668,7 +757,6 @@ namespace GrapheneTrace.Web.Controllers
             return RedirectToAction("Admin");
         }
 
-        // ----------------- ACTION: DELETE PATIENT -----------------
         [HttpPost]
         public IActionResult DeletePatient(int id)
         {
@@ -684,15 +772,15 @@ namespace GrapheneTrace.Web.Controllers
                 _alerts.RemoveAll(a => a.PatientName == patient.FullName);
                 _prescriptions.RemoveAll(p => p.PatientName == patient.FullName);
                 _feedbacks.RemoveAll(f => f.PatientName == patient.FullName);
+                _patientClinicianMap.Remove(patient.FullName);
 
                 LogAdmin($"Deleted patient '{patient.FullName}' and related data.");
-                TempData["AdminMessage"] = $"Patient '{patient.FullName}' has been removed from the system.";
+                TempData["AdminMessage"] = $"Patient '{patient.FullName}' has been removed.";
             }
 
             return RedirectToAction("Admin");
         }
 
-        // ----------------- ACTION: SOFT ACTIVATE / DEACTIVATE USER -----------------
         [HttpPost]
         public IActionResult ToggleUserActive(int id)
         {
@@ -710,7 +798,6 @@ namespace GrapheneTrace.Web.Controllers
             return RedirectToAction("Admin");
         }
 
-        // ----------------- ACTIONS: SCHEDULE APPOINTMENT (ADMIN + CLINICIAN) -----------------
         [HttpPost]
         public IActionResult ScheduleAppointment(string patientName, string clinicianName, DateTime startTime, DateTime endTime)
         {
@@ -753,14 +840,11 @@ namespace GrapheneTrace.Web.Controllers
                 TempData["AdminMessage"] = $"Appointment scheduled for {patientName} with {clinicianName}.";
                 return RedirectToAction("Admin");
             }
-            else
-            {
-                TempData["ClinicianMessage"] = $"Appointment scheduled for {patientName}.";
-                return RedirectToAction("Clinician", new { selectedClinician = clinicianName });
-            }
+
+            TempData["ClinicianMessage"] = $"Appointment scheduled for {patientName}.";
+            return RedirectToAction("Clinician", new { selectedClinician = clinicianName });
         }
 
-        // ----------------- ACTIONS: TOGGLE CLINICIAN AVAILABILITY -----------------
         [HttpPost]
         public IActionResult ToggleClinicianAvailability(int id)
         {
@@ -779,7 +863,6 @@ namespace GrapheneTrace.Web.Controllers
             return RedirectToAction("Admin");
         }
 
-        // ----------------- ACTIONS: RESOLVE ALERT (ADMIN + CLINICIAN) -----------------
         [HttpPost]
         public IActionResult ResolveAlert(int id)
         {
@@ -797,17 +880,14 @@ namespace GrapheneTrace.Web.Controllers
                     TempData["AdminMessage"] = $"Alert for {alert.PatientName} has been marked as resolved.";
                     return RedirectToAction("Admin");
                 }
-                else
-                {
-                    TempData["ClinicianMessage"] = $"Alert for {alert.PatientName} has been marked as resolved.";
-                    return RedirectToAction("Clinician");
-                }
+
+                TempData["ClinicianMessage"] = $"Alert for {alert.PatientName} has been marked as resolved.";
+                return RedirectToAction("Clinician");
             }
 
             return IsAdmin ? RedirectToAction("Admin") : RedirectToAction("Clinician");
         }
 
-        // ----------------- ACTION: CREATE ALERT (ADMIN + CLINICIAN) -----------------
         [HttpPost]
         public IActionResult CreateAlert(string patientName, string severity, string message)
         {
@@ -823,11 +903,9 @@ namespace GrapheneTrace.Web.Controllers
                     TempData["AdminMessage"] = "Please fill in all alert details.";
                     return RedirectToAction("Admin");
                 }
-                else
-                {
-                    TempData["ClinicianMessage"] = "Please fill in all alert details.";
-                    return RedirectToAction("Clinician");
-                }
+
+                TempData["ClinicianMessage"] = "Please fill in all alert details.";
+                return RedirectToAction("Clinician");
             }
 
             var alert = new AlertItem
@@ -848,14 +926,11 @@ namespace GrapheneTrace.Web.Controllers
                 TempData["AdminMessage"] = $"Alert created for {patientName} ({severity}).";
                 return RedirectToAction("Admin");
             }
-            else
-            {
-                TempData["ClinicianMessage"] = $"Alert created for {patientName} ({severity}).";
-                return RedirectToAction("Clinician");
-            }
+
+            TempData["ClinicianMessage"] = $"Alert created for {patientName} ({severity}).";
+            return RedirectToAction("Clinician");
         }
 
-        // ----------------- ACTION: CREATE PRESCRIPTION (CLINICIAN + ADMIN) -----------------
         [HttpPost]
         public IActionResult CreatePrescription(string patientName, string medication, string dosage, string? notes, string? clinicianName)
         {
@@ -870,7 +945,7 @@ namespace GrapheneTrace.Web.Controllers
                 string.IsNullOrWhiteSpace(medication) ||
                 string.IsNullOrWhiteSpace(dosage))
             {
-                TempData["ClinicianMessage"] = "Please provide patient name, medication and dosage.";
+                TempData["ClinicianMessage"] = "Please provide patient, medication and dosage.";
                 return RedirectToAction("Clinician", new { selectedClinician = effectiveClinician });
             }
 
@@ -892,7 +967,6 @@ namespace GrapheneTrace.Web.Controllers
             return RedirectToAction("Clinician", new { selectedClinician = effectiveClinician });
         }
 
-        // ----------------- ACTION: PATIENT FEEDBACK -----------------
         [HttpPost]
         public IActionResult LeaveFeedback(string clinicianName, int rating, string comment)
         {
@@ -905,7 +979,7 @@ namespace GrapheneTrace.Web.Controllers
                 rating < 1 || rating > 5 ||
                 string.IsNullOrWhiteSpace(comment))
             {
-                TempData["PatientMessage"] = "Please select clinician, rating (1-5) and enter a comment.";
+                TempData["PatientMessage"] = "Please select clinician, rating (1–5) and enter a comment.";
                 return RedirectToAction("Patient");
             }
 
@@ -926,7 +1000,6 @@ namespace GrapheneTrace.Web.Controllers
             return RedirectToAction("Patient");
         }
 
-        // ----------------- ACTION: UPDATE SETTINGS (ADMIN) -----------------
         [HttpPost]
         public IActionResult UpdateSettings(int highPressureThreshold, int noMovementMinutes)
         {

@@ -1,8 +1,8 @@
-﻿using System;
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using Graphene_Group_Project.Data;
 using Graphene_Group_Project.Models;
+using GrapheneTrace.Web.Controllers;   // for DashboardController.RegisterUserFromAccount
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,14 +17,16 @@ namespace Graphene_Group_Project.Controllers
             _context = context;
         }
 
-        // -------------------- VIEW MODELS --------------------
+        // -------- VIEW MODELS --------
 
         public class LoginViewModel
         {
-            [Required, EmailAddress]
+            [Required]
+            [EmailAddress]
             public string Email { get; set; } = string.Empty;
 
-            [Required, DataType(DataType.Password)]
+            [Required]
+            [DataType(DataType.Password)]
             public string Password { get; set; } = string.Empty;
 
             [Required]
@@ -34,34 +36,37 @@ namespace Graphene_Group_Project.Controllers
         public class RegisterViewModel
         {
             [Required]
+            [Display(Name = "Full name")]
             public string FullName { get; set; } = string.Empty;
 
-            [Required, EmailAddress]
+            [Required]
+            [EmailAddress]
             public string Email { get; set; } = string.Empty;
 
-            [Required, DataType(DataType.Password)]
+            [Required]
+            [DataType(DataType.Password)]
             public string Password { get; set; } = string.Empty;
 
-            [Required, DataType(DataType.Password)]
+            [Required]
+            [DataType(DataType.Password)]
+            [Display(Name = "Confirm password")]
             [Compare("Password", ErrorMessage = "Passwords do not match.")]
             public string ConfirmPassword { get; set; } = string.Empty;
 
             [Required]
-            public string Role { get; set; } = string.Empty;
+            public string Role { get; set; } = "Patient";
+
+            // for patients only
+            [Display(Name = "Preferred clinician")]
+            public string? SelectedClinician { get; set; }
         }
 
-        // -------------------- LOGIN --------------------
+        // -------- LOGIN --------
 
         [HttpGet]
-        public IActionResult Login(string? role)
+        public IActionResult Login()
         {
-            // pre-select role if user clicked from a portal tile
-            var model = new LoginViewModel
-            {
-                Role = string.IsNullOrEmpty(role) ? "" : role
-            };
-
-            return View(model);
+            return View(new LoginViewModel());
         }
 
         [HttpPost]
@@ -72,100 +77,103 @@ namespace Graphene_Group_Project.Controllers
 
             var user = _context.UserAccounts.FirstOrDefault(u =>
                 u.Email == model.Email &&
-                u.Password == model.Password &&     // NOTE: for coursework only
+                u.Password == model.Password &&
                 u.Role == model.Role);
 
             if (user == null)
             {
-                ModelState.AddModelError(string.Empty, "Invalid email, password or role.");
+                ModelState.AddModelError(string.Empty, "Invalid credentials or role.");
                 return View(model);
             }
 
-            // ✅ save user info in session
-            HttpContext.Session.SetInt32("UserId", user.Id);
+            HttpContext.Session.SetString("UserEmail", user.Email);
             HttpContext.Session.SetString("UserRole", user.Role);
-            HttpContext.Session.SetString("UserName", user.FullName);
+            HttpContext.Session.SetString("UserName", user.FullName ?? user.Email);
 
-            // ✅ redirect to appropriate dashboard
-            return RedirectToRoleDashboard(user.Role);
+            return user.Role switch
+            {
+                "Admin" => RedirectToAction("Admin", "Dashboard"),
+                "Clinician" => RedirectToAction("Clinician", "Dashboard"),
+                _ => RedirectToAction("Patient", "Dashboard")
+            };
         }
 
-        // -------------------- REGISTER --------------------
+        // -------- REGISTER --------
+
+        private void PopulateClinicianDropdown()
+        {
+            ViewBag.Clinicians = DashboardController.GetClinicianNames();
+        }
 
         [HttpGet]
         public IActionResult Register()
         {
+            PopulateClinicianDropdown();
             return View(new RegisterViewModel());
         }
 
         [HttpPost]
         public IActionResult Register(RegisterViewModel model)
         {
+            PopulateClinicianDropdown();
+
             if (!ModelState.IsValid)
                 return View(model);
 
             if (_context.UserAccounts.Any(u => u.Email == model.Email))
             {
-                ModelState.AddModelError(nameof(model.Email),
-                    "An account with this email already exists.");
+                ModelState.AddModelError(nameof(model.Email), "An account with this email already exists.");
+                return View(model);
+            }
+
+            if (model.Role == "Patient" && string.IsNullOrWhiteSpace(model.SelectedClinician))
+            {
+                ModelState.AddModelError(nameof(model.SelectedClinician), "Please choose your clinician.");
                 return View(model);
             }
 
             var user = new UserAccount
             {
-                FullName = model.FullName,
-                Email = model.Email,
-                Password = model.Password,  // coursework only
-                Role = model.Role
+                FullName = model.FullName.Trim(),
+                Email = model.Email.Trim(),
+                Password = model.Password, // coursework only
+                Role = model.Role.Trim()
             };
 
             _context.UserAccounts.Add(user);
             _context.SaveChanges();
 
-            // ✅ immediately log the user in & redirect to their dashboard
-            HttpContext.Session.SetInt32("UserId", user.Id);
-            HttpContext.Session.SetString("UserRole", user.Role);
-            HttpContext.Session.SetString("UserName", user.FullName);
+            var clinicianName = model.Role == "Patient" ? model.SelectedClinician : null;
 
-            return RedirectToRoleDashboard(user.Role);
+            DashboardController.RegisterUserFromAccount(
+                model.FullName,
+                model.Email,
+                model.Role,
+                clinicianName);
+
+            HttpContext.Session.SetString("UserEmail", user.Email);
+            HttpContext.Session.SetString("UserRole", user.Role);
+            HttpContext.Session.SetString("UserName", user.FullName ?? user.Email);
+
+            return user.Role switch
+            {
+                "Admin" => RedirectToAction("Admin", "Dashboard"),
+                "Clinician" => RedirectToAction("Clinician", "Dashboard"),
+                _ => RedirectToAction("Patient", "Dashboard")
+            };
         }
 
-        // -------------------- LOGOUT --------------------
+        // -------- LOGOUT & ACCESS DENIED --------
 
-        [HttpGet]
         public IActionResult Logout()
         {
             HttpContext.Session.Clear();
-            TempData["Message"] = "You have been logged out.";
             return RedirectToAction("Index", "Home");
         }
 
-        // -------------------- ACCESS DENIED --------------------
-
-        [HttpGet]
         public IActionResult AccessDenied()
         {
             return View();
-        }
-
-        // -------------------- HELPER --------------------
-
-        private IActionResult RedirectToRoleDashboard(string role)
-        {
-            switch (role)
-            {
-                case "Admin":
-                    return RedirectToAction("Admin", "Dashboard");      
-
-                case "Clinician":
-                    return RedirectToAction("Clinician", "Dashboard"); 
-
-                case "Patient":
-                    return RedirectToAction("Patient", "Dashboard");  
-
-                default:
-                    return RedirectToAction("Index", "Home");
-            }
         }
     }
 }
