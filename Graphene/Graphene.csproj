@@ -20,51 +20,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Content Update="wwwroot\data\GTLB-Data\1c0fd777_20251011.csv">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Content>
-	  <Content Update="wwwroot\data\GTLB-Data\1c0fd777_20251012.csv">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Content>
-	  <Content Update="wwwroot\data\GTLB-Data\1c0fd777_20251013.csv">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Content>
-	  <Content Update="wwwroot\data\GTLB-Data\543d4676_20251011.csv">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Content>
-	  <Content Update="wwwroot\data\GTLB-Data\543d4676_20251012.csv">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Content>
-	  <Content Update="wwwroot\data\GTLB-Data\543d4676_20251013.csv">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Content>
-	  <Content Update="wwwroot\data\GTLB-Data\71e66ab3_20251011.csv">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Content>
-	  <Content Update="wwwroot\data\GTLB-Data\71e66ab3_20251012.csv">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Content>
-	  <Content Update="wwwroot\data\GTLB-Data\71e66ab3_20251013.csv">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Content>
-	  <Content Update="wwwroot\data\GTLB-Data\d13043b3_20251011.csv">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Content>
-	  <Content Update="wwwroot\data\GTLB-Data\d13043b3_20251012.csv">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Content>
-	  <Content Update="wwwroot\data\GTLB-Data\d13043b3_20251013.csv">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Content>
-	  <Content Update="wwwroot\data\GTLB-Data\de0e9b2c_20251011.csv">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Content>
-	  <Content Update="wwwroot\data\GTLB-Data\de0e9b2c_20251012.csv">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Content>
-	  <Content Update="wwwroot\data\GTLB-Data\de0e9b2c_20251013.csv">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Content>
+	  <Folder Include="DataFiles\" />
 	</ItemGroup>
 
 </Project>

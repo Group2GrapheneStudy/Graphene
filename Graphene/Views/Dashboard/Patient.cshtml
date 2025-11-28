@@ -1,6 +1,4 @@
-﻿@using System.Linq
-@model GrapheneTrace.Web.Controllers.DashboardController.PatientViewModel
-
+﻿@model GrapheneTrace.Web.Controllers.DashboardController.PatientViewModel
 @{
     ViewData["Title"] = "Patient Dashboard";
 }
@@ -10,527 +8,247 @@
         transition: transform .15s ease, box-shadow .15s ease;
     }
 
-    .stat-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 .75rem 1.5rem rgba(0, 0, 0, 0.06);
-    }
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 .75rem 1.5rem rgba(0, 0, 0, 0.06);
+        }
 
     .status-pill {
-        padding: .15rem .5rem;
-        border-radius: 999px;
-        font-size: .75rem;
-    }
-
-    .severity-high {
-        background: #fee2e2;
-        color: #b91c1c;
-    }
-
-    .severity-medium {
-        background: #fef3c7;
-        color: #92400e;
-    }
-
-    .severity-low {
-        background: #e0f2fe;
-        color: #1d4ed8;
-    }
-
-    .badge-light-muted {
-        background-color: #f3f4f6;
-        color: #4b5563;
-    }
-
-    /* Compact pixel-style heatmap (larger) */
-    .mini-heat-card {
-        background: #ffffff;
-        color: #111827;
-        border-radius: 16px;
-    }
-
-    .mini-heat-title {
-        font-size: 1.1rem;
-        font-weight: 700;
-    }
-
-    .mini-heat-subtitle {
-        font-size: .8rem;
-        color: #6b7280;
-    }
-
-    .mini-heat-grid {
-        display: grid;
-        grid-template-columns: repeat(8, 1fr); /* 8 x 8 grid (64 cells) */
-        gap: 3px;
-        width: 280px;          /* larger ~7–8cm wide */
-        padding: 12px;
-        background-color: #f9fafb;
+        padding: 0.2rem 0.6rem;
         border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
     }
 
-    .mini-heat-cell {
-        width: 100%;
-        padding-top: 100%;     /* square pixels */
-        border-radius: 3px;
-    }
-
-    /* colour bands – low → high pressure */
-    .heat-low {
-        background-color: #1d4ed8; /* blue */
-    }
-
-    .heat-med-low {
-        background-color: #22c55e; /* green */
-    }
-
-    .heat-med-high {
-        background-color: #facc15; /* yellow */
-    }
-
-    .heat-high {
-        background-color: #ef4444; /* red */
-    }
-
-    .mini-heat-legend span {
-        display: inline-block;
-        width: 14px;
-        height: 8px;
-        border-radius: 999px;
-        margin-right: 4px;
+    .chart-container {
+        position: relative;
+        height: 250px;
     }
 </style>
 
-<div class="container my-4">
+<h1 class="mb-4">Welcome, @Model.PatientName</h1>
 
-    @if (TempData["PatientMessage"] != null)
-    {
-        <div class="alert alert-info">
-            @TempData["PatientMessage"]
+<!-- 🔥 NEW PRESSURE ALERT BANNER (added section) -->
+@if (Model.ActiveAlerts != null && Model.ActiveAlerts.Any())
+{
+    var latest = Model.ActiveAlerts.OrderByDescending(a => a.RaisedAt).First();
+
+    <div class="alert alert-warning d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <strong>Active pressure alert detected.</strong>
+            <span class="ms-1">
+                Latest: <strong>@latest.Severity</strong> at
+                @latest.RaisedAt.ToString("dd MMM HH:mm").
+            </span>
         </div>
-    }
+        <a href="#alerts-panel" class="btn btn-sm btn-outline-dark">View alerts</a>
+    </div>
+}
+else
+{
+    <div class="alert alert-success mb-4">
+        <strong>No active pressure alerts.</strong> Your readings look normal today.
+    </div>
+}
+<!-- END NEW SECTION -->
 
-    <!-- HEADER -->
-    <div class="row mb-3">
-        <div class="col-md-8">
-            <h2 class="fw-bold mb-1">Welcome back, @Model.PatientName</h2>
-            <p class="text-muted mb-0">
-                This is your Graphene Trace overview. Here you can see your appointments,
-                pressure risk, pressure heatmap and feedback.
-            </p>
+<div class="row mb-4">
+    <div class="col-md-4 mb-3">
+        <div class="card stat-card text-bg-light h-100">
+            <div class="card-body">
+                <h6>Pressure Risk Score</h6>
+                <h2>@Model.PressureRiskScore</h2>
+                <p class="mb-0 small text-muted">@Model.PressureRiskLabel</p>
+            </div>
         </div>
     </div>
 
-    <!-- MAIN 2-COLUMN LAYOUT -->
-    <div class="row g-4 mb-4">
-        <!-- LEFT: APPOINTMENTS + ALERTS + HEATMAP -->
-        <div class="col-lg-7">
-            <!-- TOP CARDS -->
-            <div class="row g-3 mb-3">
-                <div class="col-md-6">
-                    <div class="card stat-card border-0 shadow-sm">
-                        <div class="card-body">
-                            <h6 class="text-muted">Next appointment</h6>
-                            @if (Model.UpcomingAppointments.Any())
-                            {
-                                var next = Model.UpcomingAppointments.First();
-                                <h5 class="fw-bold mb-1">@next.StartTime.ToString("dd MMM, HH:mm")</h5>
-                                <small class="text-muted">
-                                    With @next.ClinicianName
-                                </small>
-                            }
-                            else
-                            {
-                                <h5 class="fw-bold mb-1">No appointment booked</h5>
-                                <small class="text-muted">
-                                    You can book an appointment below.
-                                </small>
-                            }
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-md-6">
-                    <div class="card stat-card border-0 shadow-sm">
-                        <div class="card-body">
-                            <h6 class="text-muted">Pressure risk index</h6>
-                            <h3 class="fw-bold">@Model.PressureRiskScore<span class="fs-6">/100</span></h3>
-                            <small class="text-muted">@Model.PressureRiskLabel</small>
-                            <div class="mt-3">
-                                <div class="progress" style="height: 6px;">
-                                    <div class="progress-bar"
-                                         role="progressbar"
-                                         style="width:@Model.PressureRiskScore%;"
-                                         aria-valuenow="@Model.PressureRiskScore"
-                                         aria-valuemin="0"
-                                         aria-valuemax="100"></div>
-                                </div>
-                                <small class="text-muted d-block mt-1">
-                                    Calculated from your recent alerts and sensor readings.
-                                </small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- UPCOMING APPOINTMENTS -->
-            <div class="card border-0 shadow-sm mb-4">
-                <div class="card-body">
-                    <h5 class="fw-bold mb-3">Upcoming appointments</h5>
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Time</th>
-                                    <th>Clinician</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var a in Model.UpcomingAppointments)
-                                {
-                                    <tr>
-                                        <td>@a.StartTime.ToString("dd MMM")</td>
-                                        <td>@a.StartTime.ToString("HH:mm")</td>
-                                        <td>@a.ClinicianName</td>
-                                    </tr>
-                                }
-                                @if (!Model.UpcomingAppointments.Any())
-                                {
-                                    <tr>
-                                        <td colspan="3" class="text-muted">You have no upcoming appointments.</td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- PATIENT BOOKS APPOINTMENT -->
-            <div class="card border-0 shadow-sm mb-4">
-                <div class="card-body">
-                    <h5 class="fw-bold mb-3">Book an appointment</h5>
-
-                    @if (!string.IsNullOrWhiteSpace(Model.AssignedClinicianName))
-                    {
-                        <p class="text-muted small">
-                            Your clinician: <strong>@Model.AssignedClinicianName</strong>
-                        </p>
-
-                        <form asp-action="BookAppointmentAsPatient" method="post" class="row g-2">
-                            <div class="col-md-6">
-                                <label class="form-label small">Start time</label>
-                                <input type="datetime-local" name="startTime"
-                                       class="form-control form-control-sm" />
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label small">End time</label>
-                                <input type="datetime-local" name="endTime"
-                                       class="form-control form-control-sm" />
-                            </div>
-                            <div class="col-12 mt-2">
-                                <button type="submit" class="btn btn-primary btn-sm w-100">
-                                    Book appointment with @Model.AssignedClinicianName
-                                </button>
-                            </div>
-                        </form>
-                    }
-                    else
-                    {
-                        <p class="text-muted small mb-0">
-                            You do not yet have an assigned clinician. Please contact admin or your clinic
-                            so they can assign one to you.
-                        </p>
-                    }
-                </div>
-            </div>
-
-            <!-- RECENT ALERTS -->
-            <div class="card border-0 shadow-sm mb-4">
-                <div class="card-body">
-                    <h5 class="fw-bold mb-3">Recent alerts from your sensor</h5>
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Severity</th>
-                                    <th>Message</th>
-                                    <th>Time</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var alert in Model.RecentAlerts)
-                                {
-                                    var severityClass = alert.Severity == "High"
-                                        ? "severity-high"
-                                        : alert.Severity == "Medium"
-                                            ? "severity-medium"
-                                            : "severity-low";
-                                    <tr>
-                                        <td>
-                                            <span class="status-pill @severityClass">@alert.Severity</span>
-                                        </td>
-                                        <td>@alert.Message</td>
-                                        <td>@alert.RaisedAt.ToString("dd MMM HH:mm")</td>
-                                    </tr>
-                                }
-                                @if (!Model.RecentAlerts.Any())
-                                {
-                                    <tr>
-                                        <td colspan="3" class="text-muted">No alerts recorded yet.</td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- MINI HEATMAP SNAPSHOT FROM CSV -->
-            <div class="card border-0 shadow-sm mini-heat-card mb-4"
-                 id="pressureAlertContainer"
-                 data-max-pressure="@Model.LatestFrameMax">
-                <div class="card-body">
-                    <h5 class="mini-heat-title mb-1">Live pressure snapshot</h5>
-                    <p class="mini-heat-subtitle mb-3">
-                        An 8×8 pixel view of pressure under your feet. Colours move from blue (low)
-                        to red (high).
-                    </p>
-
-                    @if (Model.LatestFrameValues != null && Model.LatestFrameValues.Length > 0)
-                    {
-                        <p class="mini-heat-subtitle mb-2">
-                            Session: @Model.SensorSessionId, frame #@Model.LatestFrameIndex<br />
-                            Peak value: @Model.LatestFrameMax, average: @Model.LatestFrameAverage?.ToString("0.0")
-                        </p>
-
-                       
-                            var values = Model.LatestFrameValues;
-                            int cellCount = Math.Min(values.Length, 64); // 8x8 = 64 pixels
-                            var slice = values.Take(cellCount).ToArray();
-                        
-
-                        <div class="mini-heat-grid">
-                            @for (int i = 0; i < slice.Length; i++)
-                            {
-                                var v = slice[i];
-
-                                // 4 bands: 0–24, 25–49, 50–74, 75–100
-                                var cls = v >= 75 ? "heat-high"
-                                         : v >= 50 ? "heat-med-high"
-                                         : v >= 25 ? "heat-med-low"
-                                         : "heat-low";
-
-                                <div class="mini-heat-cell @cls"></div>
-                            }
-                        </div>
-
-                        <div class="mini-heat-subtitle mt-3 d-flex align-items-center mini-heat-legend">
-                            <span class="heat-low"></span> Low
-                            <span class="ms-3 heat-med-low"></span> Medium
-                            <span class="ms-3 heat-med-high"></span> High
-                            <span class="ms-3 heat-high"></span> Very high
-                        </div>
-                    }
-                    else
-                    {
-                        <p class="mini-heat-subtitle mb-0">
-                            No sensor frame data is currently attached to your profile. Once your mat is paired,
-                            you&apos;ll see a coloured snapshot here.
-                        </p>
-                    }
-                </div>
-            </div>
-        </div>
-
-        <!-- RIGHT: PRESCRIPTIONS + PRESSURE TREND + FEEDBACK -->
-        <div class="col-lg-5">
-            <!-- PRESCRIPTIONS -->
-            <div class="card border-0 shadow-sm mb-4">
-                <div class="card-body">
-                    <h5 class="fw-bold mb-3">Your prescriptions</h5>
-                    @if (Model.Prescriptions.Any())
-                    {
-                        <div class="table-responsive" style="max-height: 220px; overflow-y: auto;">
-                            <table class="table table-sm align-middle mb-0 small">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Clinician</th>
-                                        <th>Medication</th>
-                                        <th>Dosage</th>
-                                        <th>Added</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var p in Model.Prescriptions)
-                                    {
-                                        <tr>
-                                            <td>@p.ClinicianName</td>
-                                            <td>@p.Medication</td>
-                                            <td>@p.Dosage</td>
-                                            <td>@p.CreatedAt.ToString("dd MMM")</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        </div>
-                    }
-                    else
-                    {
-                        <p class="text-muted small mb-0">
-                            You do not have any prescriptions recorded yet.
-                        </p>
-                    }
-                </div>
-            </div>
-
-            <!-- PRESSURE TREND (Chart.js line graph) -->
-            <div class="card border-0 shadow-sm mb-4">
-                <div class="card-body">
-                    <h5 class="fw-bold mb-3">Pressure trend (latest session)</h5>
-                    @if (Model.PressureTrend.Any())
-                    {
-                        <p class="text-muted small">
-                            Each point is a snapshot from your latest Graphene Trace session.
-                        </p>
-                        <canvas id="pressureTrendChart" height="140"
-                                data-points="@string.Join(",", Model.PressureTrend)"></canvas>
-                    }
-                    else
-                    {
-                        <p class="text-muted small mb-0">
-                            No pressure data available yet. Once your sensor starts sending data,
-                            a pressure trend will appear here.
-                        </p>
-                    }
-                </div>
-            </div>
-
-            <!-- FEEDBACK -->
-            <div class="card border-0 shadow-sm">
-                <div class="card-body">
-                    <h5 class="fw-bold mb-3">Leave feedback</h5>
-                    <p class="text-muted small">
-                        Tell us about your experience with your clinician or the service. Your feedback helps improve care.
-                    </p>
-                    <form asp-action="LeaveFeedback" method="post">
-                        <div class="mb-2">
-                            <label class="form-label small">Clinician name</label>
-                            <input name="clinicianName" class="form-control form-control-sm" placeholder="e.g. Dr. Clark" />
-                        </div>
-                        <div class="mb-2">
-                            <label class="form-label small">Rating (1–5)</label>
-                            <select name="rating" class="form-select form-select-sm">
-                                <option value="">Select rating</option>
-                                <option value="1">1 – Very poor</option>
-                                <option value="2">2 – Poor</option>
-                                <option value="3">3 – OK</option>
-                                <option value="4">4 – Good</option>
-                                <option value="5">5 – Excellent</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small">Comment</label>
-                            <textarea name="comment" rows="2" class="form-control form-control-sm"></textarea>
-                        </div>
-                        <button type="submit" class="btn btn-primary btn-sm w-100">
-                            Submit feedback
-                        </button>
-                    </form>
-
-                    @if (Model.MyFeedback.Any())
-                    {
-                        <hr />
-                        <h6 class="fw-bold mb-2">Your recent feedback</h6>
-                        <ul class="list-group list-group-flush small">
-                            @foreach (var f in Model.MyFeedback)
-                            {
-                                <li class="list-group-item">
-                                    <div class="d-flex justify-content-between">
-                                        <span>@f.ClinicianName – @f.Rating/5</span>
-                                        <span class="text-muted">@f.CreatedAt.ToString("dd MMM")</span>
-                                    </div>
-                                    <div>@f.Comment</div>
-                                </li>
-                            }
-                        </ul>
-                    }
-                </div>
+    <div class="col-md-8 mb-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <h6 class="mb-3">Pressure Trend (last 7 readings)</h6>
+                <canvas id="pressureChart"></canvas>
             </div>
         </div>
     </div>
 </div>
 
-@section Scripts {
-    <partial name="_ValidationScriptsPartial" />
-
-    <!-- Chart.js from CDN for the line graph -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-
-    <!-- Simple beep sound (online audio) -->
-    <audio id="pressureBeep"
-           src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
-           preload="auto"></audio>
-
-    <script>
-        (function () {
-            // Line chart for pressure trend
-            const canvas = document.getElementById('pressureTrendChart');
-            if (canvas) {
-                const pointsStr = canvas.getAttribute('data-points') || '';
-                const values = pointsStr
-                    .split(',')
-                    .map(x => parseInt(x.trim(), 10))
-                    .filter(x => !isNaN(x));
-
-                if (values.length > 0 && window.Chart) {
-                    const labels = values.map((_, i) => i + 1);
-                    const ctx = canvas.getContext('2d');
-                    new Chart(ctx, {
-                        type: 'line',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                label: 'Pressure index',
-                                data: values,
-                                tension: 0.3,
-                                fill: false
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            plugins: {
-                                legend: { display: false }
-                            },
-                            scales: {
-                                y: {
-                                    min: 0,
-                                    max: 100,
-                                    title: { display: true, text: 'Pressure index (0–100)' }
-                                },
-                                x: {
-                                    display: false
-                                }
-                            }
-                        }
-                    });
-                }
-            }
-
-            // Beep + subtle highlight if latest peak is high
-            const alertCard = document.getElementById('pressureAlertContainer');
-            if (alertCard) {
-                const maxStr = alertCard.getAttribute('data-max-pressure') || '0';
-                const maxVal = parseInt(maxStr, 10) || 0;
-                if (maxVal >= 70) {
-                    const beep = document.getElementById('pressureBeep');
-                    if (beep && beep.play) {
-                        beep.play().catch(() => { /* ignore autoplay errors */ });
+<!-- Upcoming appointments -->
+<div class="card mb-4">
+    <div class="card-header">
+        <strong>Upcoming Appointments (@Model.UpcomingAppointments.Count)</strong>
+    </div>
+    <div class="card-body p-0">
+        @if (!Model.UpcomingAppointments.Any())
+        {
+            <p class="m-3 text-muted">No upcoming appointments.</p>
+        }
+        else
+        {
+            <table class="table table-sm mb-0">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>Clinician</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var a in Model.UpcomingAppointments)
+                    {
+                        <tr>
+                            <td>@a.StartTime.ToString("yyyy-MM-dd")</td>
+                            <td>@a.StartTime.ToString("HH:mm") – @a.EndTime.ToString("HH:mm")</td>
+                            <td>@a.ClinicianName</td>
+                            <td>@a.Status</td>
+                        </tr>
                     }
-                    alertCard.classList.add('border', 'border-danger');
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+<!-- Active Alerts -->
+<div id="alerts-panel" class="card mb-4">
+    <div class="card-header">
+        <strong>Active Alerts (@Model.ActiveAlerts.Count)</strong>
+    </div>
+    <div class="card-body p-0">
+        @if (!Model.ActiveAlerts.Any())
+        {
+            <p class="m-3 text-muted">No active alerts.</p>
+        }
+        else
+        {
+            <table class="table table-sm mb-0">
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Message</th>
+                        <th>Raised</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var al in Model.ActiveAlerts)
+                    {
+                        var sevClass = al.Severity switch
+                        {
+                            "High" => "table-danger",
+                            "Medium" => "table-warning",
+                            "Low" => "table-info",
+                            _ => ""
+                        };
+
+                        <tr class="@sevClass">
+                            <td>@al.Severity</td>
+                            <td>@al.Message</td>
+                            <td>@al.RaisedAt.ToString("dd MMM HH:mm")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+<!-- Recent Alerts -->
+<div class="card mb-4">
+    <div class="card-header">
+        <strong>Recent Alerts</strong>
+    </div>
+    <div class="card-body p-0">
+        @if (!Model.RecentAlerts.Any())
+        {
+            <p class="m-3 text-muted">No alert history found.</p>
+        }
+        else
+        {
+            <ul class="list-group list-group-flush">
+                @foreach (var al in Model.RecentAlerts)
+                {
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>
+                            <strong>@al.Severity</strong> – @al.Message
+                        </span>
+                        <span class="text-muted">@al.RaisedAt.ToString("dd MMM HH:mm")</span>
+                    </li>
                 }
-            }
-        })();
-    </script>
-}
+            </ul>
+        }
+    </div>
+</div>
+
+<!-- Prescriptions -->
+<div class="card mb-4">
+    <div class="card-header"><strong>Prescriptions</strong></div>
+    <div class="card-body p-0">
+        @if (!Model.Prescriptions.Any())
+        {
+            <p class="m-3 text-muted">No prescriptions recorded.</p>
+        }
+        else
+        {
+            <ul class="list-group list-group-flush">
+                @foreach (var p in Model.Prescriptions)
+                {
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between">
+                            <strong>@p.Medication</strong>
+                            <span class="text-muted">@p.CreatedAt.ToString("dd MMM")</span>
+                        </div>
+                        <div>@p.Dosage</div>
+                        <div class="text-muted small">@p.ClinicianName</div>
+                        <div>@p.Notes</div>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+<!-- Feedback -->
+<div class="card mb-5">
+    <div class="card-header">
+        <strong>My Feedback</strong>
+    </div>
+    <div class="card-body">
+        @if (!Model.MyFeedback.Any())
+        {
+            <p class="text-muted">You have not left any feedback yet.</p>
+        }
+        else
+        {
+            <ul class="list-group list-group-flush">
+                @foreach (var f in Model.MyFeedback)
+                {
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between">
+                            <span>@f.ClinicianName – @f.Rating/5</span>
+                            <span class="text-muted">@f.CreatedAt.ToString("dd MMM")</span>
+                        </div>
+                        <div>@f.Comment</div>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    var ctx = document.getElementById('pressureChart').getContext('2d');
+    var chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: ['1','2','3','4','5','6','7'],
+            datasets: [{
+                label: 'Pressure Level',
+                data: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.PressureTrend)),
+                borderColor: '#e63946',
+                tension: 0.3
+            }]
+        }
+    });
+</script>

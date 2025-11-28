@@ -2,16 +2,16 @@
 
 @{
     ViewData["Title"] = "Register";
-    var clinicians = ViewBag.Clinicians as List<string> ?? new List<string>();
 }
 
 <div class="container mt-4">
+
     <div class="row justify-content-center">
         <div class="col-md-6">
 
             <div class="card shadow-sm border-0">
                 <div class="card-body">
-                    <h3 class="fw-bold mb-3 text-center">Create an account</h3>
+                    <h3 class="fw-bold mb-3 text-center">Create Account</h3>
 
                     <form asp-action="Register" method="post" novalidate>
                         <div class="mb-3">
@@ -40,61 +40,32 @@
 
                         <div class="mb-3">
                             <label asp-for="Role" class="form-label">Role</label>
-                            <select asp-for="Role" class="form-select" id="roleSelect">
-                                <option value="Patient">Patient</option>
-                                <option value="Clinician">Clinician</option>
-                                <option value="Admin">Admin</option>
+                            <select asp-for="Role" class="form-select">
+                                <option value="">-- Select Role --</option>
+                                <option>Patient</option>
+                                <option>Clinician</option>
+                                <option>Admin</option>
                             </select>
                             <span asp-validation-for="Role" class="text-danger"></span>
                         </div>
 
-                        <div class="mb-3" id="clinicianSelectRow">
-                            <label asp-for="SelectedClinician" class="form-label">
-                                Choose your clinician
-                            </label>
-                            <select asp-for="SelectedClinician" class="form-select">
-                                <option value="">-- Select clinician --</option>
-                                @foreach (var c in clinicians)
-                                {
-                                    <option value="@c">@c</option>
-                                }
-                            </select>
-                            <span asp-validation-for="SelectedClinician" class="text-danger"></span>
-                        </div>
-
-                        <button type="submit" class="btn btn-primary w-100 mb-3">
-                            Register
-                        </button>
+                        <button type="submit" class="btn btn-primary w-100 mb-3">Register</button>
                     </form>
 
                     <div class="text-center">
                         <span class="text-muted">Already have an account?</span>
-                        <a asp-action="Login">Login here</a>
+                        <a href="/Account/Login">Login</a>
                     </div>
                 </div>
             </div>
 
         </div>
     </div>
+
 </div>
 
 @section Scripts {
-    <partial name="_ValidationScriptsPartial" />
-    <script>
-        (function () {
-            const roleSelect = document.getElementById('roleSelect');
-            const clinicianRow = document.getElementById('clinicianSelectRow');
-
-            function updateClinicianVisibility() {
-                if (roleSelect.value === 'Patient') {
-                    clinicianRow.style.display = 'block';
-                } else {
-                    clinicianRow.style.display = 'none';
-                }
-            }
-
-            roleSelect.addEventListener('change', updateClinicianVisibility);
-            updateClinicianVisibility();
-        })();
-    </script>
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
 }
