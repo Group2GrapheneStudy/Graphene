@@ -1,21 +1,42 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using Graphene_Group_Project.Data;
+using Graphene_Group_Project.Data.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Graphene_Group_Project.Data;
-using Graphene_Group_Project.Data.Entities;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using static GrapheneTrace.Web.Controllers.DashboardController.ClinicianViewModel;
 
 namespace GrapheneTrace.Web.Controllers
 {
     public class DashboardController : Controller
     {
-        // DB CONTEXT // 2
+        // DB CONTEXT
         private readonly AppDbContext _db;
 
         public DashboardController(AppDbContext db)
         {
             _db = db;
+        }
+
+        // ----------------- MESSAGE ITEM MODEL -----------------
+        public class MessageItem
+        {
+            public int Id { get; set; }
+
+            public int PatientId { get; set; }
+            public string PatientName { get; set; } = string.Empty; // for display
+
+            public string ClinicianName { get; set; } = string.Empty;
+
+            // "Patient" or "Clinician"
+            public string FromRole { get; set; } = string.Empty;
+
+            public string Text { get; set; } = string.Empty;
+            public DateTime SentAt { get; set; }
+
+            public bool IsReadByPatient { get; set; }
+            public bool IsReadByClinician { get; set; }
         }
 
         // ----------------- ROLE HELPERS -----------------
@@ -128,6 +149,12 @@ namespace GrapheneTrace.Web.Controllers
 
         public class ClinicianViewModel
         {
+            public class PatientOption
+            {
+                public int PatientId { get; set; }
+                public string FullName { get; set; } = string.Empty;
+            }
+
             public string ClinicianName { get; set; } = string.Empty;
             public string SelectedClinician { get; set; } = string.Empty;
             public List<string> Clinicians { get; set; } = new();
@@ -138,7 +165,8 @@ namespace GrapheneTrace.Web.Controllers
             public List<AppointmentItem> TodayAppointments { get; set; } = new();
             public List<AppointmentItem> UpcomingAppointments { get; set; } = new();
 
-            public List<string> Patients { get; set; } = new();
+            // now a list of objects with ID + name
+            public List<PatientOption> Patients { get; set; } = new();
 
             public List<AlertItem> ActiveAlerts { get; set; } = new();
             public int HighAlerts { get; set; }
@@ -146,7 +174,9 @@ namespace GrapheneTrace.Web.Controllers
             public int LowAlerts { get; set; }
 
             public List<PrescriptionItem> Prescriptions { get; set; } = new();
+            public List<MessageItem> InboxMessages { get; set; } = new();
         }
+
 
         public class PatientViewModel
         {
@@ -163,6 +193,9 @@ namespace GrapheneTrace.Web.Controllers
             public List<int> PressureTrend { get; set; } = new(); // simple numbers for UI
 
             public List<PatientFeedbackItem> MyFeedback { get; set; } = new();
+
+            // Conversation for this patient
+            public List<MessageItem> Conversation { get; set; } = new();
         }
 
         // ----------------- DEMO DATA -----------------
@@ -229,7 +262,6 @@ namespace GrapheneTrace.Web.Controllers
         };
 
         private static readonly List<PrescriptionItem> _prescriptions = new();
-
         private static readonly List<PatientFeedbackItem> _feedbacks = new();
 
         private static int _nextUserId = _users.Count == 0 ? 1 : _users.Max(u => u.Id) + 1;
@@ -237,6 +269,9 @@ namespace GrapheneTrace.Web.Controllers
         private static int _nextAlertId = _alerts.Count == 0 ? 1 : _alerts.Max(a => a.Id) + 1;
         private static int _nextPrescriptionId = 1;
         private static int _nextFeedbackId = 1;
+
+        private static readonly List<MessageItem> _messages = new();
+        private static int _nextMessageId = 1;
 
         // System settings (configurable on admin screen)
         private static int _highPressureThreshold = 80;
@@ -263,10 +298,13 @@ namespace GrapheneTrace.Web.Controllers
                 return RedirectToAction("AccessDenied", "Account");
             }
 
-            // We assume the patient name stored in session matches the names used in appointments/prescriptions.
+            // Name stored in session
             var patientName = HttpContext.Session.GetString("UserName") ?? "Patient";
-
             var today = DateTime.Today;
+
+            // Try to find the matching Patient row in the DB
+            var dbPatient = _db.Patients.FirstOrDefault(p => p.FullName == patientName);
+            var patientId = dbPatient?.PatientId ?? 0;
 
             var upcomingAppointments = _appointments
                 .Where(a => a.PatientName == patientName && a.StartTime >= today)
@@ -279,7 +317,7 @@ namespace GrapheneTrace.Web.Controllers
                 .Take(10)
                 .ToList();
 
-            // Existing in-memory alerts
+            // In-memory alerts
             var activeAlerts = _alerts
                 .Where(a => a.PatientName == patientName && !a.IsResolved)
                 .OrderByDescending(a => a.RaisedAt)
@@ -291,8 +329,7 @@ namespace GrapheneTrace.Web.Controllers
                 .Take(5)
                 .ToList();
 
-            // merge DB alerts from Alert entity // 2
-            var dbPatient = _db.Patients.FirstOrDefault(p => p.FullName == patientName);
+            // Merge DB alerts for this patient
             if (dbPatient != null)
             {
                 var dbAlerts = _db.Alerts
@@ -334,11 +371,14 @@ namespace GrapheneTrace.Web.Controllers
             if (score > 100) score = 100;
 
             string riskLabel;
-            if (score >= 70) riskLabel = "High risk – please follow repositioning advice and contact your clinician.";
-            else if (score >= 40) riskLabel = "Moderate risk – keep an eye on your posture and pressure areas.";
-            else riskLabel = "Low risk – readings look OK, continue normal care.";
+            if (score >= 70)
+                riskLabel = "High risk – please follow repositioning advice and contact your clinician.";
+            else if (score >= 40)
+                riskLabel = "Moderate risk – keep an eye on your posture and pressure areas.";
+            else
+                riskLabel = "Low risk – readings look OK, continue normal care.";
 
-            // Simple synthetic pressure trend (for UI effect)
+            // Synthetic pressure trend
             var pressureTrend = new List<int>();
             var baseValue = 40 + highCount * 10 + medCount * 5;
             var random = new Random(patientName.GetHashCode());
@@ -355,6 +395,22 @@ namespace GrapheneTrace.Web.Controllers
                 .Take(10)
                 .ToList();
 
+            // Load conversation for this patient (by PatientId)
+            var conversation = new List<MessageItem>();
+            if (patientId != 0)
+            {
+                conversation = _messages
+                    .Where(m => m.PatientId == patientId)
+                    .OrderBy(m => m.SentAt)
+                    .ToList();
+
+                // Mark clinician messages as read
+                foreach (var msg in conversation.Where(m => m.FromRole == "Clinician"))
+                {
+                    msg.IsReadByPatient = true;
+                }
+            }
+
             var vm = new PatientViewModel
             {
                 PatientName = patientName,
@@ -365,7 +421,8 @@ namespace GrapheneTrace.Web.Controllers
                 PressureRiskScore = score,
                 PressureRiskLabel = riskLabel,
                 PressureTrend = pressureTrend,
-                MyFeedback = myFeedback
+                MyFeedback = myFeedback,
+                Conversation = conversation
             };
 
             ViewData["Title"] = "Patient Dashboard";
@@ -423,13 +480,25 @@ namespace GrapheneTrace.Web.Controllers
                 .OrderBy(n => n)
                 .ToList();
 
-            // Existing in-memory alerts for this clinician's patients
+            // Map those names to real Patient rows so we get PatientId
+            var patientOptions = _db.Patients
+                .Where(p => patientNames.Contains(p.FullName))
+                .Select(p => new ClinicianViewModel.PatientOption
+                {
+                    PatientId = p.PatientId,
+                    FullName = p.FullName
+                })
+                .OrderBy(p => p.FullName)
+                .ToList();
+
+
+            // In-memory alerts for this clinician's patients
             var activeAlerts = _alerts
                 .Where(a => !a.IsResolved && patientNames.Contains(a.PatientName))
                 .OrderByDescending(a => a.RaisedAt)
                 .ToList();
 
-            // merge DB alerts for those patients // 2
+            // Merge DB alerts for those patients
             if (patientNames.Any())
             {
                 var dbPatients = _db.Patients
@@ -490,13 +559,24 @@ namespace GrapheneTrace.Web.Controllers
                 UpcomingAppointments = upcomingAppointments,
                 TodayAppointmentsCount = todayAppointments.Count,
                 UpcomingAppointmentsCount = upcomingAppointments.Count,
-                Patients = patientNames,
+                Patients = patientOptions,
                 ActiveAlerts = activeAlerts,
                 HighAlerts = highAlerts,
                 MediumAlerts = mediumAlerts,
                 LowAlerts = lowAlerts,
                 Prescriptions = myPrescriptions
             };
+
+            // All messages visible to any clinician
+            vm.InboxMessages = _messages
+                .OrderByDescending(m => m.SentAt)
+                .ToList();
+
+            // Mark patient messages as read
+            foreach (var msg in vm.InboxMessages.Where(m => m.FromRole == "Patient"))
+            {
+                msg.IsReadByClinician = true;
+            }
 
             ViewData["Title"] = "Clinician Dashboard";
             return View(vm);
@@ -925,6 +1005,90 @@ namespace GrapheneTrace.Web.Controllers
 
             return RedirectToAction("Patient");
         }
+
+        // ----------------- ACTION: PATIENT → CLINICIAN MESSAGE -----------------
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult SendMessageToClinician(string text)
+        {
+            if (!IsPatient)
+                return RedirectToAction("AccessDenied", "Account");
+
+            var patientName = HttpContext.Session.GetString("UserName") ?? "Unknown";
+
+            var patientEntity = _db.Patients.FirstOrDefault(p => p.FullName == patientName);
+            if (patientEntity == null)
+            {
+                TempData["PatientMessage"] = "Patient record not found.";
+                return RedirectToAction("Patient");
+            }
+
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                TempData["PatientMessage"] = "Please enter a message.";
+                return RedirectToAction("Patient");
+            }
+
+            _messages.Add(new MessageItem
+            {
+                Id = _nextMessageId++,
+                PatientId = patientEntity.PatientId,
+                PatientName = patientEntity.FullName,
+                ClinicianName = "Any", // any clinician can respond
+                FromRole = "Patient",
+                Text = text.Trim(),
+                SentAt = DateTime.Now,
+                IsReadByPatient = true,
+                IsReadByClinician = false
+            });
+
+            TempData["PatientMessage"] = "Message sent.";
+            return RedirectToAction("Patient");
+        }
+
+        // ----------------- ACTION: CLINICIAN → PATIENT MESSAGE -----------------
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult SendMessageToPatient(int patientId, string text)
+        {
+            if (!IsClinician && !IsAdmin)
+                return RedirectToAction("AccessDenied", "Account");
+
+            if (patientId <= 0 || string.IsNullOrWhiteSpace(text))
+            {
+                TempData["ClinicianMessage"] = "Enter patient ID and a message.";
+                return RedirectToAction("Clinician");
+            }
+
+            var clinicianName = HttpContext.Session.GetString("UserName") ?? "Clinician";
+
+            var patientEntity = _db.Patients.FirstOrDefault(p => p.PatientId == patientId);
+            if (patientEntity == null)
+            {
+                TempData["ClinicianMessage"] = "Patient ID not found.";
+                return RedirectToAction("Clinician");
+            }
+
+            var msg = new MessageItem
+            {
+                Id = _nextMessageId++,
+                PatientId = patientEntity.PatientId,
+                PatientName = patientEntity.FullName,
+                ClinicianName = clinicianName,
+                FromRole = "Clinician",
+                Text = text.Trim(),
+                SentAt = DateTime.Now,
+                IsReadByPatient = false,
+                IsReadByClinician = true
+            };
+
+            _messages.Add(msg);
+
+            TempData["ClinicianMessage"] = $"Message sent to {patientEntity.FullName}.";
+            return RedirectToAction("Clinician");
+        }
+
+
 
         // ----------------- ACTION: UPDATE SETTINGS (ADMIN) -----------------
         [HttpPost]
