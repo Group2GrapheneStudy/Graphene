@@ -84,6 +84,8 @@ namespace GrapheneTrace.Web.Controllers
             public int TotalUsers { get; set; }
             public int TotalPatients { get; set; }
             public int TotalClinicians { get; set; }
+            public int OpenAlerts { get; set; }
+            public int UpcomingAppointments { get; set; }
 
             // Alert analytics
             public int AlertsToday { get; set; }
@@ -93,30 +95,20 @@ namespace GrapheneTrace.Web.Controllers
 
             public List<PatientAlertSummary> TopPatientsByAlerts { get; set; } = new();
 
-            // Required by Admin.cshtml
-            public int HighPressureThreshold { get; set; }
-            public int NoMovementMinutes { get; set; }
-
-            public int OpenAlerts { get; set; }
-            public int UpcomingAppointments { get; set; }
-
-            // Main collections
+            // Core lists
             public List<AdminUserSummary> Patients { get; set; } = new();
             public List<AdminUserSummary> Clinicians { get; set; } = new();
 
-            public List<AppointmentItem> Appointments { get; set; } = new();   // renamed from AllAppointments
-            public List<AlertItem> Alerts { get; set; } = new();               // renamed from AllAlerts
+            public List<AppointmentItem> AllAppointments { get; set; } = new();
+            public List<AlertItem> AllAlerts { get; set; } = new();
 
-            // Clinician workload blocks
             public List<ClinicianWorkloadInfo> ClinicianWorkload { get; set; } = new();
 
-            // Feedback log
             public List<PatientFeedbackItem> RecentFeedback { get; set; } = new();
 
-            // Audit log
             public List<string> AdminLog { get; set; } = new();
 
-            // Filters from search bar
+            // Filters from the admin search form
             public string Search { get; set; } = string.Empty;
             public string RoleFilter { get; set; } = "All";
             public bool ShowInactive { get; set; }
@@ -670,8 +662,8 @@ namespace GrapheneTrace.Web.Controllers
             vm.OpenAlerts = openAlerts.Count;
             vm.UpcomingAppointments = upcomingAppointments.Count;
 
-            vm.Alerts = openAlerts;
-            vm.Appointments = upcomingAppointments;
+            vm.AllAlerts = openAlerts;
+            vm.AllAppointments = upcomingAppointments;
 
             vm.AlertsToday = openAlerts.Count(a => a.RaisedAt.Date == today);
             vm.HighAlerts = openAlerts.Count(a => a.Severity == "High");
