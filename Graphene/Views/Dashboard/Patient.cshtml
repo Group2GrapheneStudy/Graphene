@@ -14,44 +14,38 @@
         }
 
     .status-pill {
-        padding: 0.2rem 0.6rem;
-        border-radius: 12px;
+        display: inline-flex;
+        align-items: center;
+        padding: 0.15rem 0.65rem;
+        border-radius: 999px;
         font-size: 0.75rem;
-        font-weight: 600;
+        font-weight: 500;
     }
 
-    .chart-container {
-        position: relative;
-        height: 250px;
+    .status-pill.low {
+        background-color: #e3f9e5;
+        color: #1b6b3a;
+    }
+
+    .status-pill.medium {
+        background-color: #fff4cc;
+        color: #996c00;
+    }
+
+    .status-pill.high {
+        background-color: #ffe3e3;
+        color: #b00020;
     }
 </style>
 
-<h1 class="mb-4">Welcome, @Model.PatientName</h1>
-
-<!-- 🔥 NEW PRESSURE ALERT BANNER (added section) -->
-@if (Model.ActiveAlerts != null && Model.ActiveAlerts.Any())
-{
-    var latest = Model.ActiveAlerts.OrderByDescending(a => a.RaisedAt).First();
-
-    <div class="alert alert-warning d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <strong>Active pressure alert detected.</strong>
-            <span class="ms-1">
-                Latest: <strong>@latest.Severity</strong> at
-                @latest.RaisedAt.ToString("dd MMM HH:mm").
-            </span>
-        </div>
-        <a href="#alerts-panel" class="btn btn-sm btn-outline-dark">View alerts</a>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h3 class="mb-0">Welcome, @Model.PatientName</h3>
+        <small class="text-muted">Your Graphene Trace pressure overview</small>
     </div>
-}
-else
-{
-    <div class="alert alert-success mb-4">
-        <strong>No active pressure alerts.</strong> Your readings look normal today.
-    </div>
-}
-<!-- END NEW SECTION -->
+</div>
 
+<!-- TOP METRICS ROW -->
 <div class="row mb-4">
     <div class="col-md-4 mb-3">
         <div class="card stat-card text-bg-light h-100">
@@ -63,13 +57,71 @@ else
         </div>
     </div>
 
-    <div class="col-md-8 mb-3">
+    <div class="col-md-4 mb-3">
         <div class="card stat-card h-100">
             <div class="card-body">
-                <h6 class="mb-3">Pressure Trend (last 7 readings)</h6>
-                <canvas id="pressureChart"></canvas>
+                <h6>Peak Pressure Index (PPI)</h6>
+                <h2>
+                    @(Model.CurrentPpi.HasValue? Model.CurrentPpi.Value.ToString() : "N/A")
+                </h2>
+                <p class="mb-0 small text-muted">
+                    Latest reading from your graphene cushion
+                </p>
             </div>
         </div>
+    </div>
+
+    <div class="col-md-4 mb-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <h6>Contact Area</h6>
+                <h2>
+                    @(Model.CurrentContactArea.HasValue? Model.CurrentContactArea.Value.ToString("0.0") + "%" : "N/A")
+                </h2>
+                <p class="mb-0 small text-muted">
+                    Percentage of sensor area currently under load
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- TREND + RANGE SELECTION -->
+<div class="card stat-card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+            <h6 class="mb-0">Pressure Trend</h6>
+            <small class="text-muted">@Model.TimeRangeLabel</small>
+        </div>
+        <div class="btn-group btn-group-sm" role="group" aria-label="Time range">
+            <a asp-action="Patient"
+               asp-controller="Dashboard"
+               asp-route-range="1h"
+               class="btn btn-outline-secondary @(Model.TimeRange == "1h" ? "active" : "")">
+                1h
+            </a>
+            <a asp-action="Patient"
+               asp-controller="Dashboard"
+               asp-route-range="6h"
+               class="btn btn-outline-secondary @(Model.TimeRange == "6h" ? "active" : "")">
+                6h
+            </a>
+            <a asp-action="Patient"
+               asp-controller="Dashboard"
+               asp-route-range="24h"
+               class="btn btn-outline-secondary @(Model.TimeRange == "24h" ? "active" : "")">
+                24h
+            </a>
+            <a asp-action="Patient"
+               asp-controller="Dashboard"
+               asp-route-range="all"
+               class="btn btn-outline-secondary @(Model.TimeRange == "all" ? "active" : "")">
+                All
+            </a>
+        </div>
+    </div>
+    <div class="card-body">
+        <canvas id="pressureChart"></canvas>
     </div>
 </div>
 
@@ -81,7 +133,7 @@ else
     <div class="card-body p-0">
         @if (!Model.UpcomingAppointments.Any())
         {
-            <p class="m-3 text-muted">No upcoming appointments.</p>
+            <p class="m-3 text-muted">You have no upcoming appointments scheduled.</p>
         }
         else
         {
@@ -95,13 +147,13 @@ else
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var a in Model.UpcomingAppointments)
+                    @foreach (var appt in Model.UpcomingAppointments)
                     {
                         <tr>
-                            <td>@a.StartTime.ToString("yyyy-MM-dd")</td>
-                            <td>@a.StartTime.ToString("HH:mm") – @a.EndTime.ToString("HH:mm")</td>
-                            <td>@a.ClinicianName</td>
-                            <td>@a.Status</td>
+                            <td>@appt.StartTime.ToString("dd MMM yyyy")</td>
+                            <td>@appt.StartTime.ToString("HH:mm") – @appt.EndTime.ToString("HH:mm")</td>
+                            <td>@appt.ClinicianName</td>
+                            <td>@appt.Status</td>
                         </tr>
                     }
                 </tbody>
@@ -110,113 +162,90 @@ else
     </div>
 </div>
 
-<!-- Active Alerts -->
-<div id="alerts-panel" class="card mb-4">
-    <div class="card-header">
-        <strong>Active Alerts (@Model.ActiveAlerts.Count)</strong>
+<!-- Active + recent alerts -->
+<div class="row mb-4">
+    <div class="col-md-6 mb-3">
+        <div class="card h-100">
+            <div class="card-header">
+                <strong>Active Alerts (@Model.ActiveAlerts.Count)</strong>
+            </div>
+            <div class="card-body p-0">
+                @if (!Model.ActiveAlerts.Any())
+                {
+                    <p class="m-3 text-muted">No active alerts.</p>
+                }
+                else
+                {
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Severity</th>
+                                <th>Message</th>
+                                <th>Raised</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var al in Model.ActiveAlerts)
+                            {
+                                var sevClass = al.Severity switch
+                                {
+                                    "High" => "table-danger",
+                                    "Medium" => "table-warning",
+                                    "Low" => "table-info",
+                                    _ => ""
+                                };
+
+                                <tr class="@sevClass">
+                                    <td>@al.Severity</td>
+                                    <td>@al.Message</td>
+                                    <td>@al.RaisedAt.ToString("dd MMM HH:mm")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
     </div>
-    <div class="card-body p-0">
-        @if (!Model.ActiveAlerts.Any())
-        {
-            <p class="m-3 text-muted">No active alerts.</p>
-        }
-        else
-        {
-            <table class="table table-sm mb-0">
-                <thead>
-                    <tr>
-                        <th>Severity</th>
-                        <th>Message</th>
-                        <th>Raised</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var al in Model.ActiveAlerts)
-                    {
-                        var sevClass = al.Severity switch
+
+    <div class="col-md-6 mb-3">
+        <div class="card h-100">
+            <div class="card-header">
+                <strong>Recent Alerts</strong>
+            </div>
+            <div class="card-body p-0">
+                @if (!Model.RecentAlerts.Any())
+                {
+                    <p class="m-3 text-muted">No recent alerts.</p>
+                }
+                else
+                {
+                    <ul class="list-group list-group-flush">
+                        @foreach (var al in Model.RecentAlerts)
                         {
-                            "High" => "table-danger",
-                            "Medium" => "table-warning",
-                            "Low" => "table-info",
-                            _ => ""
-                        };
-
-                        <tr class="@sevClass">
-                            <td>@al.Severity</td>
-                            <td>@al.Message</td>
-                            <td>@al.RaisedAt.ToString("dd MMM HH:mm")</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        }
-    </div>
-</div>
-
-<!-- Recent Alerts -->
-<div class="card mb-4">
-    <div class="card-header">
-        <strong>Recent Alerts</strong>
-    </div>
-    <div class="card-body p-0">
-        @if (!Model.RecentAlerts.Any())
-        {
-            <p class="m-3 text-muted">No alert history found.</p>
-        }
-        else
-        {
-            <ul class="list-group list-group-flush">
-                @foreach (var al in Model.RecentAlerts)
-                {
-                    <li class="list-group-item d-flex justify-content-between">
-                        <span>
-                            <strong>@al.Severity</strong> – @al.Message
-                        </span>
-                        <span class="text-muted">@al.RaisedAt.ToString("dd MMM HH:mm")</span>
-                    </li>
+                            <li class="list-group-item d-flex justify-content-between">
+                                <div>
+                                    <strong>@al.Severity</strong> – @al.Message
+                                </div>
+                                <span class="text-muted small">@al.RaisedAt.ToString("dd MMM HH:mm")</span>
+                            </li>
+                        }
+                    </ul>
                 }
-            </ul>
-        }
-    </div>
-</div>
-
-<!-- Prescriptions -->
-<div class="card mb-4">
-    <div class="card-header"><strong>Prescriptions</strong></div>
-    <div class="card-body p-0">
-        @if (!Model.Prescriptions.Any())
-        {
-            <p class="m-3 text-muted">No prescriptions recorded.</p>
-        }
-        else
-        {
-            <ul class="list-group list-group-flush">
-                @foreach (var p in Model.Prescriptions)
-                {
-                    <li class="list-group-item">
-                        <div class="d-flex justify-content-between">
-                            <strong>@p.Medication</strong>
-                            <span class="text-muted">@p.CreatedAt.ToString("dd MMM")</span>
-                        </div>
-                        <div>@p.Dosage</div>
-                        <div class="text-muted small">@p.ClinicianName</div>
-                        <div>@p.Notes</div>
-                    </li>
-                }
-            </ul>
-        }
+            </div>
+        </div>
     </div>
 </div>
 
 <!-- Feedback -->
-<div class="card mb-5">
+<div class="card mb-4">
     <div class="card-header">
-        <strong>My Feedback</strong>
+        <strong>Your Feedback</strong>
     </div>
     <div class="card-body">
         @if (!Model.MyFeedback.Any())
         {
-            <p class="text-muted">You have not left any feedback yet.</p>
+            <p class="text-muted mb-0">You have not left any feedback yet.</p>
         }
         else
         {
@@ -225,8 +254,10 @@ else
                 {
                     <li class="list-group-item">
                         <div class="d-flex justify-content-between">
-                            <span>@f.ClinicianName – @f.Rating/5</span>
-                            <span class="text-muted">@f.CreatedAt.ToString("dd MMM")</span>
+                            <span>
+                                <strong>@f.ClinicianName</strong> – rated @f.Rating/5
+                            </span>
+                            <span class="text-muted small">@f.CreatedAt.ToString("dd MMM yyyy")</span>
                         </div>
                         <div>@f.Comment</div>
                     </li>
@@ -237,7 +268,7 @@ else
 </div>
 
 <!-- Patient ↔ Clinician messages -->
-<div class="card mt-4">
+<div class="card mb-4">
     <div class="card-header">
         <div class="d-flex justify-content-between align-items-center">
             <div>
@@ -249,7 +280,6 @@ else
         </div>
     </div>
 
-
     <div class="card-body">
         <!-- Conversation history -->
         <div class="mb-3" style="max-height:300px; overflow-y:auto;">
@@ -259,12 +289,12 @@ else
                 {
                     var isPatient = m.FromRole == "Patient";
 
-                    <div class="mb-2 @(isPatient ? "text-end" : "")">
+                    <div class="mb-2">
                         <div class="small text-muted">
                             <strong>@(isPatient ? "You" : m.ClinicianName)</strong>
-                            · @m.SentAt.ToString("g")
+                            <span class="ms-1">@m.SentAt.ToString("dd MMM HH:mm")</span>
                         </div>
-                        <div class="d-inline-block p-2 border rounded">
+                        <div class="p-2 rounded @(isPatient ? "bg-primary text-white" : "bg-light")">
                             @m.Text
                         </div>
                     </div>
@@ -272,12 +302,14 @@ else
             }
             else
             {
-                <p class="text-muted mb-0">No messages yet. Send a message below.</p>
+                <p class="text-muted">No messages yet. Use the box below to contact your clinician.</p>
             }
         </div>
 
         <!-- New message form -->
-        <form asp-controller="Dashboard" asp-action="SendMessageToClinician" method="post">
+        <form asp-controller="Dashboard"
+              asp-action="SendMessageToClinician"
+              method="post">
             @Html.AntiForgeryToken()
             <div class="mb-2">
                 <textarea name="text"
@@ -292,27 +324,32 @@ else
 
         @if (TempData["PatientMessage"] != null)
         {
-            <div class="alert alert-info mt-3">
+            <div class="alert alert-info alert-dismissible fade show mt-2" role="alert">
                 @TempData["PatientMessage"]
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
         }
     </div>
 </div>
 
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        var trendData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.PressureTrend));
+        var labels = trendData.map(function (_, idx) { return (idx + 1).toString(); });
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-    var ctx = document.getElementById('pressureChart').getContext('2d');
-    var chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: ['1','2','3','4','5','6','7'],
-            datasets: [{
-                label: 'Pressure Level',
-                data: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.PressureTrend)),
-                borderColor: '#e63946',
-                tension: 0.3
-            }]
-        }
-    });
-</script>
+        var ctx = document.getElementById('pressureChart').getContext('2d');
+        var chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Peak pressure over time',
+                    data: trendData,
+                    borderColor: '#e63946',
+                    tension: 0.3
+                }]
+            }
+        });
+    </script>
+}
