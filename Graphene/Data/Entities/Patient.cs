@@ -12,10 +12,5 @@
         public ICollection<DataFile> Files { get; set; } = new List<DataFile>();
         public ICollection<PressureFrame> Frames { get; set; } = new List<PressureFrame>();
         public ICollection<Alert> Alerts { get; set; } = new List<Alert>();
-
-        /// <summary>
-        /// Messages linked to this patient (patient–clinician conversation).
-        /// </summary>
-        public ICollection<PatientMessage> Messages { get; set; } = new List<PatientMessage>();
     }
 }
