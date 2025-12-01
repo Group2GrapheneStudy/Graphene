@@ -28,16 +28,22 @@
 
 <h1 class="mb-4">Welcome, @Model.ClinicianName</h1>
 
-<!-- 🔥 NEW PRESSURE ALERT BANNER (added section) -->
+@{
+    var highCount = Model.ActiveAlerts?.Count(a => a.Severity == "High") ?? 0;
+    var medCount = Model.ActiveAlerts?.Count(a => a.Severity == "Medium") ?? 0;
+    var lowCount = Model.ActiveAlerts?.Count(a => a.Severity == "Low") ?? 0;
+}
+
+<!-- PRESSURE ALERT BANNER -->
 @if (Model.ActiveAlerts != null && Model.ActiveAlerts.Any())
 {
     <div class="alert alert-danger d-flex justify-content-between align-items-center mb-4">
         <div>
             <strong>Active pressure alerts for your patients.</strong>
             <span class="ms-1">
-                High: <strong>@Model.HighAlerts</strong>,
-                Medium: <strong>@Model.MediumAlerts</strong>,
-                Low: <strong>@Model.LowAlerts</strong>.
+                High: <strong>@highCount</strong>,
+                Medium: <strong>@medCount</strong>,
+                Low: <strong>@lowCount</strong>.
             </span>
         </div>
         <a href="#alerts-panel" class="btn btn-sm btn-outline-light">Review alerts</a>
@@ -49,7 +55,6 @@ else
         <strong>No active pressure alerts.</strong> All monitored patients appear stable.
     </div>
 }
-<!-- END NEW SECTION -->
 
 <div class="row mb-4">
     <div class="col-md-4 mb-3">
@@ -76,14 +81,14 @@ else
         <div class="card stat-card h-100">
             <div class="card-body">
                 <h6>Active Pressure Alerts</h6>
-                <h2>@Model.ActiveAlerts.Count</h2>
+                <h2>@(Model.ActiveAlerts?.Count ?? 0)</h2>
                 <p class="mb-0 small text-muted">Across your monitored patients</p>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Clinician selector -->
+<!-- CLINICIAN SELECTOR -->
 <div class="card mb-4">
     <div class="card-header">
         <strong>Your Clinician Profile</strong>
@@ -95,7 +100,14 @@ else
                 <select name="selectedClinician" class="form-select">
                     @foreach (var c in Model.Clinicians)
                     {
-                        <option value="@c" selected="@(Model.SelectedClinician == c)">@c</option>
+                        if (Model.SelectedClinician == c)
+                        {
+                            <option value="@c" selected>@c</option>
+                        }
+                        else
+                        {
+                            <option value="@c">@c</option>
+                        }
                     }
                 </select>
             </div>
@@ -106,13 +118,13 @@ else
     </div>
 </div>
 
-<!-- Today's Appointments -->
+<!-- TODAY'S APPOINTMENTS -->
 <div class="card mb-4">
     <div class="card-header">
         <strong>Today's Appointments (@Model.TodayAppointments.Count)</strong>
     </div>
     <div class="card-body p-0">
-        @if (!Model.TodayAppointments.Any())
+        @if (Model.TodayAppointments == null || !Model.TodayAppointments.Any())
         {
             <p class="m-3 text-muted">No appointments scheduled for today.</p>
         }
@@ -141,13 +153,13 @@ else
     </div>
 </div>
 
-<!-- Upcoming Appointments -->
+<!-- UPCOMING APPOINTMENTS -->
 <div class="card mb-4">
     <div class="card-header">
         <strong>Upcoming Appointments (@Model.UpcomingAppointments.Count)</strong>
     </div>
     <div class="card-body p-0">
-        @if (!Model.UpcomingAppointments.Any())
+        @if (Model.UpcomingAppointments == null || !Model.UpcomingAppointments.Any())
         {
             <p class="m-3 text-muted">No upcoming appointments.</p>
         }
@@ -178,13 +190,13 @@ else
     </div>
 </div>
 
-<!-- Patient List -->
+<!-- PATIENT LIST -->
 <div class="card mb-4">
     <div class="card-header">
-        <strong>Patients Under Your Care (@Model.Patients.Count)</strong>
+        <strong>Patients Under Your Care (@(Model.Patients?.Count ?? 0))</strong>
     </div>
     <div class="card-body">
-        @if (!Model.Patients.Any())
+        @if (Model.Patients == null || !Model.Patients.Any())
         {
             <p class="text-muted">No active patients assigned to you.</p>
         }
@@ -203,13 +215,12 @@ else
     </div>
 </div>
 
-<!-- PRESSURE ALERTS -->
+<!-- PRESSURE ALERTS TABLE -->
 <div id="alerts-panel" class="card mb-4">
     <div class="card-header">
-        <strong>Active Pressure Alerts (@Model.ActiveAlerts.Count)</strong>
+        <strong>Active Pressure Alerts (@(Model.ActiveAlerts?.Count ?? 0))</strong>
     </div>
     <div class="card-body p-0">
-
         <table class="table table-sm mb-0">
             <thead>
                 <tr>
@@ -221,7 +232,7 @@ else
                 </tr>
             </thead>
             <tbody>
-                @if (Model.ActiveAlerts.Any())
+                @if (Model.ActiveAlerts != null && Model.ActiveAlerts.Any())
                 {
                     @foreach (var a in Model.ActiveAlerts)
                     {
@@ -250,11 +261,10 @@ else
                 }
             </tbody>
         </table>
-
     </div>
 </div>
 
-<!-- Clinician view of patient messages -->
+<!-- MESSAGES -->
 <div class="card mt-4">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Patient messages</h5>
@@ -264,7 +274,6 @@ else
     </div>
 
     <div class="card-body">
-        <!-- Message list -->
         <div class="mb-3" style="max-height:320px; overflow-y:auto;">
             @if (Model.InboxMessages != null && Model.InboxMessages.Any())
             {
@@ -274,9 +283,7 @@ else
                         <div class="d-flex justify-content-between">
                             <div>
                                 <strong>@msg.PatientName</strong>
-                                <span class="small text-muted">
-                                    (@msg.FromRole)
-                                </span>
+                                <span class="small text-muted">(@msg.FromRole)</span>
                             </div>
                             <small class="text-muted">@msg.SentAt.ToString("g")</small>
                         </div>
@@ -292,17 +299,14 @@ else
 
         <hr />
 
-        <!-- Reply form -->
         <h6>Reply to a patient</h6>
-
         <form asp-controller="Dashboard" asp-action="SendMessageToPatient" method="post">
             @Html.AntiForgeryToken()
 
             <div class="row g-2 align-items-end">
-
                 <div class="col-md-4">
                     <label class="form-label">Patient ID</label>
-                    <input type="number" name="patientId" class="form-control" placeholder="Enter patient ID..." />
+                    <input type="number" name="patientId" class="form-control" />
                 </div>
 
                 <div class="col-md-6">
@@ -313,11 +317,8 @@ else
                 <div class="col-md-2 d-grid">
                     <button type="submit" class="btn btn-primary">Send</button>
                 </div>
-
             </div>
         </form>
-
-
 
         @if (TempData["ClinicianMessage"] != null)
         {
@@ -328,21 +329,20 @@ else
     </div>
 </div>
 
-
-<!-- Prescriptions -->
+<!-- PRESCRIPTIONS -->
 <div class="card mb-5">
     <div class="card-header">
         <strong>Prescriptions You Have Issued</strong>
     </div>
     <div class="card-body">
-        @if (!Model.Prescriptions.Any())
+        @if (Model.RecentPrescriptions == null || !Model.RecentPrescriptions.Any())
         {
             <p class="text-muted">No prescriptions recorded yet.</p>
         }
         else
         {
             <ul class="list-group list-group-flush">
-                @foreach (var p in Model.Prescriptions)
+                @foreach (var p in Model.RecentPrescriptions)
                 {
                     <li class="list-group-item">
                         <div class="d-flex justify-content-between">
